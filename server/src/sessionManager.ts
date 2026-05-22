@@ -4,6 +4,7 @@ import { Session } from './session';
 import type { SessionHooks } from './session';
 import type { Broadcaster } from './wsHub';
 import { saveSession, deleteSessionFile, loadAllSessions } from './store';
+import { sendPush } from './push';
 import { DEFAULT_CWD } from './config';
 import type { SessionMeta, PermissionMode, PermissionDecision } from './protocol';
 
@@ -104,15 +105,31 @@ export class SessionManager {
 
   private hooks(): SessionHooks {
     return {
-      onEvent: (sessionId, event) =>
-        this.broadcaster?.toSession(sessionId, { t: 'event', sessionId, event }),
+      onEvent: (sessionId, event) => {
+        this.broadcaster?.toSession(sessionId, { t: 'event', sessionId, event });
+        // A finished turn is a "come back and look" moment — push it out.
+        if (event.kind === 'result') {
+          this.notify(
+            sessionId,
+            event.isError ? 'Turn ended with an error' : 'Turn complete',
+          );
+        }
+      },
       onMeta: (meta) => this.broadcaster?.toAll({ t: 'session', session: meta }),
-      onPermission: (request) =>
-        this.broadcaster?.toSession(request.sessionId, { t: 'permission', request }),
+      onPermission: (request) => {
+        this.broadcaster?.toSession(request.sessionId, { t: 'permission', request });
+        this.notify(request.sessionId, `Permission needed — ${request.toolName}`);
+      },
       persist: (session) => {
         void saveSession(session.toPersisted());
       },
     };
+  }
+
+  /** Fire a push notification tagged to a session (no-op if none subscribed). */
+  private notify(sessionId: string, body: string): void {
+    const title = this.sessions.get(sessionId)?.meta.title ?? 'local-pilot';
+    void sendPush({ title, body, sessionId, tag: sessionId });
   }
 }
 

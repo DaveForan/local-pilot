@@ -7,9 +7,11 @@ import { ensureDirs } from './store';
 import { SessionManager } from './sessionManager';
 import { WsHub } from './wsHub';
 import { createApiRouter } from './api';
+import { initPush } from './push';
 
 async function main(): Promise<void> {
   await ensureDirs();
+  await initPush();
 
   const manager = new SessionManager();
   await manager.init();

@@ -1000,6 +1000,27 @@ textarea {
   margin: 0 0 14px;
 }
 
+.push-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+}
+.push-toggle-text {
+  flex: 1;
+  min-width: 0;
+}
+.push-state {
+  font-weight: 600;
+}
+.push-hint {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
 /* ===== misc ============================================================== */
 
 .empty-hint {

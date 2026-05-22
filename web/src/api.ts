@@ -56,6 +56,10 @@ export const api = {
   saveSettings: (s: Record<string, unknown>) => req<{ ok: true }>('PUT', '/claude/settings', s),
   mcp: () => req<McpServers>('GET', '/mcp'),
   saveMcp: (servers: McpServers) => req<{ ok: true }>('PUT', '/mcp', servers),
+  pushVapid: () => req<{ publicKey: string }>('GET', '/push/vapid'),
+  pushSubscribe: (sub: unknown) => req<{ ok: true }>('POST', '/push/subscribe', sub),
+  pushUnsubscribe: (endpoint: string) =>
+    req<{ ok: true }>('POST', '/push/unsubscribe', { endpoint }),
   fsList: (path?: string) =>
     req<DirListing>('GET', `/fs/list${path ? `?path=${encodeURIComponent(path)}` : ''}`),
 };

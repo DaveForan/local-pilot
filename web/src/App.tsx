@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePilot, store } from './store';
 import { Sidebar } from './components/Sidebar';
 import { ChatPane } from './components/ChatPane';
@@ -11,6 +11,22 @@ export function App() {
   const [newOpen, setNewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const active = sessions.find((s) => s.id === activeId) ?? null;
+
+  // Open the right session when arriving from a push notification: via a
+  // `?session=` deep link on a cold start, or a service-worker message when
+  // a window was already open.
+  useEffect(() => {
+    const deepLink = new URLSearchParams(location.search).get('session');
+    if (deepLink) store.select(deepLink);
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (e: MessageEvent): void => {
+      if (e.data?.type === 'open-session' && typeof e.data.sessionId === 'string') {
+        store.select(e.data.sessionId);
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, []);
 
   return (
     <div className="app">

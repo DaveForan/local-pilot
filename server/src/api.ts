@@ -6,6 +6,8 @@ import { listSnippets, addSnippet, deleteSnippet } from './snippets';
 import { readSettings, writeSettings, listSkills } from './claudeConfig';
 import { readMcpServers, writeMcpServers } from './mcpConfig';
 import type { McpServers } from './mcpConfig';
+import { vapidPublicKey, addSubscription, removeSubscription } from './push';
+import type { PushSubscriptionRecord } from './push';
 
 /** REST endpoints for everything that is not the live session stream. */
 export function createApiRouter() {
@@ -64,6 +66,30 @@ export function createApiRouter() {
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
+  });
+
+  // --- push notifications --------------------------------------------------
+  router.get('/push/vapid', (_req, res) => {
+    res.json({ publicKey: vapidPublicKey() });
+  });
+
+  router.post('/push/subscribe', async (req, res) => {
+    try {
+      await addSubscription(req.body as PushSubscriptionRecord);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  router.post('/push/unsubscribe', async (req, res) => {
+    const endpoint = (req.body ?? {}).endpoint;
+    if (typeof endpoint !== 'string') {
+      res.status(400).json({ error: 'endpoint is required' });
+      return;
+    }
+    await removeSubscription(endpoint);
+    res.json({ ok: true });
   });
 
   // --- directory browser (for picking a session working directory) ---------
