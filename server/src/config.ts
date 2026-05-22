@@ -2,7 +2,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 export const PORT = Number(process.env.PORT ?? 8787);
-export const HOST = process.env.HOST ?? '0.0.0.0';
+// Bind to loopback only: the app is reached over the tailnet exclusively via
+// `tailscale serve`, never directly on the LAN. Override HOST at your own risk.
+export const HOST = process.env.HOST ?? '127.0.0.1';
 
 const DATA_DIR = process.env.LOCAL_PILOT_DATA ?? path.join(os.homedir(), '.local-pilot');
 

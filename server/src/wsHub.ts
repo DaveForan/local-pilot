@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { Server, IncomingMessage } from 'node:http';
 import type { SessionManager } from './sessionManager';
 import type { ClientMessage, ServerMessage } from './protocol';
-import { checkToken } from './auth';
+import { hasValidSession } from './auth';
 
 /** What SessionManager needs to push messages out to browsers. */
 export interface Broadcaster {
@@ -28,10 +28,9 @@ export class WsHub implements Broadcaster {
   }
 
   private onConnection(ws: WebSocket, req: IncomingMessage): void {
-    // The browser cannot set headers on a WebSocket, so the token rides in
-    // the query string (the connection is wss when fronted by tailscale serve).
-    const token = new URL(req.url ?? '', 'http://localhost').searchParams.get('token');
-    if (!checkToken(token)) {
+    // The session cookie rides along on the WebSocket handshake (same-origin),
+    // so no secret ever appears in the URL.
+    if (!hasValidSession(req.headers.cookie)) {
       ws.close(1008, 'unauthorized');
       return;
     }

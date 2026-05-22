@@ -62,5 +62,10 @@ else
   echo "    not generated yet — check $TOKEN_FILE once the service is running"
 fi
 echo
+echo "local-pilot listens on 127.0.0.1 only — it is not exposed on your LAN."
+echo "To reach it from other devices, expose it on your tailnet over HTTPS:"
+echo "    sudo tailscale serve --bg 8787"
+echo "then open https://<this-host>.<tailnet>.ts.net"
+echo
 echo "Done. Manage it with: systemctl --user {status,restart,stop} local-pilot"
 echo "Logs: journalctl --user -u local-pilot -f"

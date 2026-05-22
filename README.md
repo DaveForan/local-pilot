@@ -64,30 +64,29 @@ npm run build      # builds web/dist
 npm start          # serves API, WebSocket and the built UI on :8787
 ```
 
-## Access token
+## Security model
 
-local-pilot is **token-protected** — without the token the server would hand
-full Claude Code control to anyone who can reach the port.
-
-- On first start a random token is generated and saved to
-  `~/.local-pilot/token` (also printed by `npm run service:install`).
-- Set your own with the `LOCAL_PILOT_TOKEN` environment variable instead.
-- The browser prompts for it once and remembers it; "Sign out" in the drawer
-  clears it.
-
-`cat ~/.local-pilot/token` to retrieve it.
+- **Binds `127.0.0.1` only.** The server is never exposed on your LAN. The
+  one way in is `tailscale serve` (below), so reach is limited to your tailnet.
+- **Access token.** A random token is generated on first start into
+  `~/.local-pilot/token` (also printed by `npm run service:install`); set your
+  own with `LOCAL_PILOT_TOKEN`. `cat ~/.local-pilot/token` to retrieve it.
+- **Session cookies.** Signing in exchanges the token for an `HttpOnly`,
+  `SameSite=Strict`, `Secure` session cookie — the token is never stored in
+  the browser. "Sign out" in the drawer ends the session. Login attempts are
+  rate-limited.
 
 ## Connecting
 
-Open `http://<tailscale-host>:8787` and sign in with the token. For **HTTPS**
-— required for push notifications and voice input — front it with
-`tailscale serve`:
+The app listens on loopback, so expose it on your tailnet over HTTPS:
 
 ```sh
 sudo tailscale serve --bg 8787
 ```
 
-Then open `https://<tailscale-host>.<tailnet>.ts.net`.
+Then open `https://<tailscale-host>.<tailnet>.ts.net` and sign in with the
+token. HTTPS via `tailscale serve` is also what makes push notifications and
+voice input work.
 
 ## Requirements
 
@@ -100,7 +99,7 @@ Then open `https://<tailscale-host>.<tailnet>.ts.net`.
 | Variable                  | Default              | Purpose                                  |
 | -------------------------- | -------------------- | ---------------------------------------- |
 | `PORT`                     | `8787`               | HTTP/WebSocket port                      |
-| `HOST`                     | `0.0.0.0`            | Bind address (0.0.0.0 = reachable on tailnet) |
+| `HOST`                     | `127.0.0.1`          | Bind address — loopback only; front with `tailscale serve` |
 | `LOCAL_PILOT_DATA`         | `~/.local-pilot`     | Where sessions, snippets, MCP + push config are stored |
 | `LOCAL_PILOT_DEFAULT_CWD`  | `~/Projects`         | Default working directory for new sessions |
 | `LOCAL_PILOT_TOKEN`        | _(auto-generated)_   | Access token; overrides the generated one |

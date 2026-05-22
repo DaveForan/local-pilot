@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
-import { setToken } from '../auth';
 
-/** Access-token sign-in screen, shown until a valid token is stored. */
+/** Access-token sign-in screen — exchanges the token for a session cookie. */
 export function Login({ onSuccess }: { onSuccess: () => void }) {
   const [token, setTokenInput] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -13,13 +12,12 @@ export function Login({ onSuccess }: { onSuccess: () => void }) {
     if (!candidate || busy) return;
     setBusy(true);
     setErr(null);
-    setToken(candidate);
     try {
-      await api.auth();
+      await api.login(candidate);
       onSuccess();
-    } catch {
-      // req() clears the rejected token; just tell the user.
-      setErr('That access token was not accepted.');
+    } catch (e) {
+      const msg = (e as Error).message;
+      setErr(msg === 'unauthorized' ? 'That access token was not accepted.' : msg);
     } finally {
       setBusy(false);
     }

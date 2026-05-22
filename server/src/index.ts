@@ -8,7 +8,7 @@ import { SessionManager } from './sessionManager';
 import { WsHub } from './wsHub';
 import { createApiRouter } from './api';
 import { initPush } from './push';
-import { initAuth, requireAuth } from './auth';
+import { initAuth, requireAuth, handleLogin, handleLogout } from './auth';
 
 async function main(): Promise<void> {
   await ensureDirs();
@@ -27,14 +27,19 @@ async function main(): Promise<void> {
   await manager.init();
 
   const app = express();
+  // tailscale serve proxies from loopback — trust it so req.secure and
+  // req.ip reflect the real client connection.
+  app.set('trust proxy', 'loopback');
   app.use(express.json({ limit: '8mb' }));
 
-  // Public — lets monitoring and the SPA shell load without a token.
+  // Public — lets monitoring and the SPA shell load without a session.
   app.get('/healthz', (_req, res) => {
     res.json({ ok: true });
   });
 
-  // Everything that touches sessions or config requires the access token.
+  // Login is public (it issues the session); everything else is gated.
+  app.post('/api/login', handleLogin);
+  app.post('/api/logout', handleLogout);
   app.use('/api', requireAuth, createApiRouter());
 
   // Serve the built UI in production; in dev the Vite server handles it.

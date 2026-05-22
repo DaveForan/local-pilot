@@ -1,23 +1,23 @@
 // Thin REST client for everything that is not the live session stream.
-
-import { getToken, clearToken } from './auth';
+// Auth rides on an HttpOnly session cookie, so requests carry no secret.
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const token = getToken();
   const res = await fetch(`/api${path}`, {
     method,
-    headers: {
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    credentials: 'same-origin',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (res.status === 401) {
-    // The token is missing or no longer valid — drop it so the gate re-prompts.
-    clearToken();
-    throw new Error('unauthorized');
+  if (!res.ok) {
+    let message = res.status === 401 ? 'unauthorized' : `${method} ${path} → ${res.status}`;
+    try {
+      const data = (await res.json()) as { error?: string };
+      if (data?.error) message = data.error;
+    } catch {
+      /* no JSON body */
+    }
+    throw new Error(message);
   }
-  if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
   return (await res.json()) as T;
 }
 
@@ -60,6 +60,8 @@ export type McpServers = Record<string, McpServer>;
 
 export const api = {
   auth: () => req<{ ok: true }>('GET', '/auth'),
+  login: (token: string) => req<{ ok: true }>('POST', '/login', { token }),
+  logout: () => req<{ ok: true }>('POST', '/logout'),
   snippets: () => req<Snippet[]>('GET', '/snippets'),
   addSnippet: (title: string, body: string) => req<Snippet>('POST', '/snippets', { title, body }),
   deleteSnippet: (id: string) => req<{ ok: true }>('DELETE', `/snippets/${id}`),
