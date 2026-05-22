@@ -16,6 +16,8 @@ export const paths = {
   // Web-push: generated VAPID keypair and the browser subscriptions.
   vapid: path.join(DATA_DIR, 'vapid.json'),
   pushSubs: path.join(DATA_DIR, 'push-subscriptions.json'),
+  // Access token clients must present to use the API.
+  token: path.join(DATA_DIR, 'token'),
   claudeDir: path.join(os.homedir(), '.claude'),
   claudeSettings: path.join(os.homedir(), '.claude', 'settings.json'),
   // The server runs from server/, so the built UI sits one level up.

@@ -17,6 +17,12 @@ export function createApiRouter() {
     res.json({ ok: true });
   });
 
+  // Reached only when the auth middleware has already accepted the token —
+  // the web client uses it to validate a token at sign-in.
+  router.get('/auth', (_req, res) => {
+    res.json({ ok: true });
+  });
+
   // --- saved prompts --------------------------------------------------------
   router.get('/snippets', async (_req, res) => {
     res.json(await listSnippets());

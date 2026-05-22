@@ -8,17 +8,34 @@ import { SessionManager } from './sessionManager';
 import { WsHub } from './wsHub';
 import { createApiRouter } from './api';
 import { initPush } from './push';
+import { initAuth, requireAuth } from './auth';
 
 async function main(): Promise<void> {
   await ensureDirs();
   await initPush();
 
+  const auth = initAuth();
+  if (auth.generated) {
+    console.log('[auth] generated a new access token — sign in with it on each device:');
+    console.log(`[auth]   ${auth.token}`);
+    console.log(`[auth] (stored at ${paths.token})`);
+  } else {
+    console.log(`[auth] access token loaded from ${auth.source} — see ${paths.token}`);
+  }
+
   const manager = new SessionManager();
   await manager.init();
 
   const app = express();
-  app.use(express.json({ limit: '4mb' }));
-  app.use('/api', createApiRouter());
+  app.use(express.json({ limit: '8mb' }));
+
+  // Public — lets monitoring and the SPA shell load without a token.
+  app.get('/healthz', (_req, res) => {
+    res.json({ ok: true });
+  });
+
+  // Everything that touches sessions or config requires the access token.
+  app.use('/api', requireAuth, createApiRouter());
 
   // Serve the built UI in production; in dev the Vite server handles it.
   if (existsSync(paths.webDist)) {

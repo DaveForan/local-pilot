@@ -13,7 +13,8 @@
     "dev:web": "npm -w web run dev",
     "build": "npm -w web run build",
     "start": "npm -w server run start",
-    "typecheck": "npm -w server run typecheck && npm -w web run typecheck"
+    "typecheck": "npm -w server run typecheck && npm -w web run typecheck",
+    "service:install": "bash scripts/install-service.sh"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

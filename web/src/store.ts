@@ -9,6 +9,7 @@ import type {
   ChatImage,
 } from './protocol';
 import { api, type Snippet } from './api';
+import { getToken } from './auth';
 
 export interface PilotState {
   connected: boolean;
@@ -67,7 +68,10 @@ class PilotStore {
 
   private connect(): void {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    const token = getToken();
+    const ws = new WebSocket(
+      `${proto}://${location.host}/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`,
+    );
     this.ws = ws;
     ws.onopen = () => {
       this.patch({ connected: true });

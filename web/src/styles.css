@@ -1622,6 +1622,59 @@ textarea {
 
 /* ===== responsive ======================================================== */
 
+/* ===== login ============================================================= */
+
+.login {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.login-mark {
+  font-size: 22px;
+  justify-content: center;
+}
+.login-hint {
+  font-size: 13px;
+  color: var(--text-2);
+  text-align: center;
+}
+.login-hint code {
+  font-family: var(--mono);
+  background: var(--bg-3);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.login-input {
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 13px;
+  outline: none;
+  text-align: center;
+}
+.login-input:focus {
+  border-color: var(--accent);
+}
+.login-btn {
+  width: 100%;
+}
+
+/* ===== responsive ======================================================== */
+
 @media (max-width: 720px) {
   .timeline {
     padding: 58px 12px 16px;

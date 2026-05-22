@@ -3,6 +3,7 @@ import { store } from '../store';
 import { relativeTime, shortPath } from '../format';
 import { STATUS } from './status';
 import type { Theme } from '../theme';
+import { clearToken } from '../auth';
 
 const MODE_LABEL: Record<PermissionMode, string> = {
   default: 'Default · ask each tool',
@@ -150,6 +151,15 @@ export function Drawer({
           <button className="drawer-nav-item" onClick={onToggleTheme}>
             <span className="drawer-nav-icon">{theme === 'dark' ? '☀' : '☾'}</span>
             {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+          </button>
+          <button
+            className="drawer-nav-item"
+            onClick={() => {
+              clearToken();
+              location.reload();
+            }}
+          >
+            <span className="drawer-nav-icon">⎋</span> Sign out
           </button>
           <div className={`conn ${connected ? 'on' : 'off'}`}>
             <span className="conn-dot" />
