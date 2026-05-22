@@ -87,7 +87,7 @@ export class WsHub implements Broadcaster {
         this.attachments.get(ws)?.delete(msg.sessionId);
         break;
       case 'input':
-        this.manager.input(msg.sessionId, msg.text);
+        this.manager.input(msg.sessionId, msg.text, msg.images);
         break;
       case 'interrupt':
         this.manager.interrupt(msg.sessionId);

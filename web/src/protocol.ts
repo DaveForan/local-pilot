@@ -24,13 +24,29 @@ export interface SessionMeta {
   claudeSessionId: string | null;
 }
 
+/** A base64-encoded image — attached by the user, or produced by a tool. */
+export interface ChatImage {
+  mediaType: string;
+  /** base64 image bytes, with no data: URL prefix. */
+  data: string;
+}
+
 /** A single entry in a session's rendered timeline. */
 export type SessionEvent =
-  | { seq: number; ts: number; kind: 'user'; text: string }
+  | { seq: number; ts: number; kind: 'user'; text: string; images?: ChatImage[] }
   | { seq: number; ts: number; kind: 'assistant'; text: string }
   | { seq: number; ts: number; kind: 'thinking'; text: string }
   | { seq: number; ts: number; kind: 'tool_use'; toolId: string; name: string; input: unknown }
-  | { seq: number; ts: number; kind: 'tool_result'; toolId: string; content: string; isError: boolean }
+  | {
+      seq: number;
+      ts: number;
+      kind: 'tool_result';
+      toolId: string;
+      content: string;
+      isError: boolean;
+      /** Images produced by the tool (e.g. screenshots). */
+      images?: ChatImage[];
+    }
   | { seq: number; ts: number; kind: 'system'; text: string }
   | {
       seq: number;
@@ -78,7 +94,7 @@ export type ClientMessage =
     }
   | { t: 'attach'; sessionId: string }
   | { t: 'detach'; sessionId: string }
-  | { t: 'input'; sessionId: string; text: string }
+  | { t: 'input'; sessionId: string; text: string; images?: ChatImage[] }
   | { t: 'interrupt'; sessionId: string }
   | { t: 'delete'; sessionId: string }
   | { t: 'permission'; sessionId: string; requestId: string; decision: PermissionDecision }

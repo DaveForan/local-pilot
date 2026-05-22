@@ -10,6 +10,7 @@ import type {
   PermissionMode,
   PermissionRequest,
   PermissionDecision,
+  ChatImage,
 } from './protocol';
 
 type PermissionEvent = Extract<SessionEvent, { kind: 'permission' }>;
@@ -55,11 +56,11 @@ export class Session {
 
   // --- input ----------------------------------------------------------------
 
-  sendInput(text: string): void {
+  sendInput(text: string, images?: ChatImage[]): void {
     if (this.meta.status === 'ended') return;
-    this.add({ kind: 'user', text });
+    this.add(images && images.length > 0 ? { kind: 'user', text, images } : { kind: 'user', text });
     this.setStatus('running');
-    this.ensureRunner().send(text);
+    this.ensureRunner().send(text, images);
   }
 
   async interrupt(): Promise<void> {
@@ -165,12 +166,22 @@ export class Session {
         this.add({ kind: 'tool_use', toolId: event.toolId, name: event.name, input: event.input });
         break;
       case 'tool_result':
-        this.add({
-          kind: 'tool_result',
-          toolId: event.toolId,
-          content: event.content,
-          isError: event.isError,
-        });
+        this.add(
+          event.images.length > 0
+            ? {
+                kind: 'tool_result',
+                toolId: event.toolId,
+                content: event.content,
+                isError: event.isError,
+                images: event.images,
+              }
+            : {
+                kind: 'tool_result',
+                toolId: event.toolId,
+                content: event.content,
+                isError: event.isError,
+              },
+        );
         break;
       case 'system':
         this.add({ kind: 'system', text: event.text });

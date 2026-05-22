@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { SessionEvent, SessionStatus } from '../protocol';
+import type { SessionEvent, SessionStatus, ChatImage } from '../protocol';
 import { PermissionCard } from './PermissionCard';
 import { ActivityLog } from './ActivityLog';
+import { speak, stopSpeaking, speechOutputSupported } from '../speech';
 
 type ActivityEvent = Extract<
   SessionEvent,
@@ -16,6 +17,8 @@ type ResultEvent = Extract<SessionEvent, { kind: 'result' }>;
 export interface Turn {
   key: number;
   userText: string | null;
+  /** Images the user attached to their message. */
+  userImages: ChatImage[];
   /** Tool calls, results, thinking and system notes — hidden behind the log. */
   activity: ActivityEvent[];
   /** Assistant text blocks — shown as the visible response. */
@@ -29,13 +32,23 @@ function groupTurns(events: SessionEvent[]): Turn[] {
   const turns: Turn[] = [];
   let cur: Turn | null = null;
   const open = (key: number): Turn => {
-    cur = { key, userText: null, activity: [], texts: [], permissions: [], result: null };
+    cur = {
+      key,
+      userText: null,
+      userImages: [],
+      activity: [],
+      texts: [],
+      permissions: [],
+      result: null,
+    };
     turns.push(cur);
     return cur;
   };
   for (const e of events) {
     if (e.kind === 'user') {
-      open(e.seq).userText = e.text;
+      const t = open(e.seq);
+      t.userText = e.text;
+      t.userImages = e.images ?? [];
       continue;
     }
     const t = cur ?? open(e.seq);
@@ -121,7 +134,20 @@ function TurnView({
     <>
       {turn.userText != null && (
         <div className="ev ev-user">
-          <div className="bubble">{turn.userText}</div>
+          <div className="bubble">
+            {turn.userImages.length > 0 && (
+              <div className="bubble-images">
+                {turn.userImages.map((im, i) => (
+                  <img
+                    key={i}
+                    src={`data:${im.mediaType};base64,${im.data}`}
+                    alt="attachment"
+                  />
+                ))}
+              </div>
+            )}
+            {turn.userText && <span className="bubble-text">{turn.userText}</span>}
+          </div>
         </div>
       )}
 
@@ -147,9 +173,34 @@ function TurnView({
           <div className="md">
             <Markdown remarkPlugins={[remarkGfm]}>{responseText}</Markdown>
           </div>
+          <SpeakButton text={responseText} />
         </div>
       )}
     </>
+  );
+}
+
+/** Reads a reply aloud — tap to play, tap again to stop. */
+function SpeakButton({ text }: { text: string }) {
+  const [speaking, setSpeaking] = useState(false);
+  if (!speechOutputSupported()) return null;
+  return (
+    <button
+      type="button"
+      className="speak-btn"
+      aria-label={speaking ? 'Stop reading' : 'Read aloud'}
+      onClick={() => {
+        if (speaking) {
+          stopSpeaking();
+          setSpeaking(false);
+        } else {
+          setSpeaking(true);
+          speak(text, () => setSpeaking(false));
+        }
+      }}
+    >
+      {speaking ? '◼ Stop' : '🔊 Read aloud'}
+    </button>
   );
 }
 

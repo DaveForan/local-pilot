@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { formatValue } from '../format';
+import type { ChatImage } from '../protocol';
 import type { Turn } from './Timeline';
 
 type ActivityEvent = Turn['activity'][number];
@@ -53,15 +54,23 @@ function LogEntry({ event }: { event: ActivityEvent }) {
         />
       );
     }
-    case 'tool_result':
+    case 'tool_result': {
+      const images = event.images ?? [];
+      const summary = event.isError
+        ? 'Tool error'
+        : images.length > 0
+          ? `Tool result · ${images.length} image${images.length === 1 ? '' : 's'}`
+          : 'Tool result';
       return (
         <LogRow
           kind={event.isError ? 'error' : 'result'}
           tag={event.isError ? 'Error' : 'Result'}
-          summary={event.isError ? 'Tool error' : 'Tool result'}
+          summary={summary}
           body={event.content || '(empty)'}
+          images={images}
         />
       );
+    }
   }
   return null;
 }
@@ -72,19 +81,23 @@ function mcpLabel(name: string): string {
   return parts.length >= 3 ? `${parts[1]} · ${parts.slice(2).join('__')}` : name;
 }
 
-/** A collapsible log row — the dropdown for tool/MCP calls and results. */
+/** A collapsible log row — the dropdown for tool/MCP calls and results.
+ *  Any images (e.g. screenshots) show straight away; text is behind the caret. */
 function LogRow({
   kind,
   tag,
   summary,
   body,
+  images,
 }: {
   kind: string;
   tag?: string;
   summary: string;
   body: string;
+  images?: ChatImage[];
 }) {
   const [open, setOpen] = useState(false);
+  const imgs = images ?? [];
   return (
     <div className={`log-item log-${kind}`}>
       <button className="log-head" onClick={() => setOpen((v) => !v)}>
@@ -92,6 +105,13 @@ function LogRow({
         {tag && <span className="log-tag">{tag}</span>}
         <span className="log-summary">{summary}</span>
       </button>
+      {imgs.length > 0 && (
+        <div className="log-images">
+          {imgs.map((im, i) => (
+            <img key={i} src={`data:${im.mediaType};base64,${im.data}`} alt="tool screenshot" />
+          ))}
+        </div>
+      )}
       {open && <pre className="code">{body}</pre>}
     </div>
   );

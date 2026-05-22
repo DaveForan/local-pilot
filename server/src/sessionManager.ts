@@ -6,7 +6,7 @@ import type { Broadcaster } from './wsHub';
 import { saveSession, deleteSessionFile, loadAllSessions } from './store';
 import { sendPush } from './push';
 import { DEFAULT_CWD } from './config';
-import type { SessionMeta, PermissionMode, PermissionDecision } from './protocol';
+import type { SessionMeta, PermissionMode, PermissionDecision, ChatImage } from './protocol';
 
 /** Owns every Session, wires their hooks to the WebSocket broadcaster. */
 export class SessionManager {
@@ -77,8 +77,8 @@ export class SessionManager {
     this.broadcaster?.toAll({ t: 'deleted', sessionId: id });
   }
 
-  input(id: string, text: string): void {
-    this.require(id).sendInput(text);
+  input(id: string, text: string, images?: ChatImage[]): void {
+    this.require(id).sendInput(text, images);
   }
 
   interrupt(id: string): void {

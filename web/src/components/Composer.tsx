@@ -1,34 +1,99 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { SessionMeta } from '../protocol';
 import { store } from '../store';
-import { SnippetMenu } from './SnippetMenu';
+import { prepareImage, type PreparedImage } from '../image';
+import { startDictation, dictationSupported } from '../speech';
+import { AddSheet } from './AddSheet';
 import { SnippetManager } from './SnippetManager';
+
+/** Append `b` to `a` with a single separating space. */
+function joinText(a: string, b: string): string {
+  return a.trim() ? `${a.replace(/\s+$/, '')} ${b}` : b;
+}
 
 export function Composer({ session }: { session: SessionMeta }) {
   const [text, setText] = useState('');
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [interim, setInterim] = useState('');
+  const [images, setImages] = useState<PreparedImage[]>([]);
+  const [addOpen, setAddOpen] = useState(false);
   const [managerOpen, setManagerOpen] = useState(false);
+  const [listening, setListening] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const stopDictationRef = useRef<(() => void) | null>(null);
+
   const busy = session.status === 'running' || session.status === 'awaiting_permission';
   const ended = session.status === 'ended';
+  const canSend = !busy && !ended && (text.trim() !== '' || images.length > 0);
 
-  const submit = (): void => {
-    const trimmed = text.trim();
-    if (!trimmed || busy || ended) return;
-    store.sendInput(session.id, trimmed);
-    setText('');
+  const stopDictation = (): void => {
+    stopDictationRef.current?.();
+    stopDictationRef.current = null;
+    setListening(false);
+    setInterim('');
   };
 
-  /** Drop a saved prompt into the input, appending if there is already a draft. */
+  const submit = (): void => {
+    if (!canSend) return;
+    stopDictation();
+    store.sendInput(
+      session.id,
+      text.trim(),
+      images.length > 0
+        ? images.map((im) => ({ mediaType: im.mediaType, data: im.data }))
+        : undefined,
+    );
+    setText('');
+    setInterim('');
+    setImages([]);
+  };
+
   const insertSnippet = (body: string): void => {
     setText((cur) => (cur.trim() ? `${cur.replace(/\s+$/, '')}\n${body}` : body));
   };
 
-  /** Save whatever is currently typed as a new snippet. */
   const saveDraft = (): void => {
     const draft = text.trim();
     if (!draft) return;
     const title = window.prompt('Name this saved prompt:', draft.slice(0, 48));
     if (title && title.trim()) void store.createSnippet(title.trim(), draft);
+  };
+
+  const onFiles = async (files: FileList | null): Promise<void> => {
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) continue;
+      try {
+        const prepared = await prepareImage(file);
+        setImages((cur) => [...cur, prepared]);
+      } catch {
+        window.alert(`Could not load image “${file.name}”.`);
+      }
+    }
+  };
+
+  const toggleDictation = (): void => {
+    if (listening) {
+      if (interim) setText((t) => joinText(t, interim));
+      stopDictation();
+      return;
+    }
+    setListening(true);
+    stopDictationRef.current = startDictation({
+      onText: (t, isFinal) => {
+        if (isFinal) {
+          setText((cur) => joinText(cur, t));
+          setInterim('');
+        } else {
+          setInterim(t);
+        }
+      },
+      onEnd: () => {
+        stopDictationRef.current = null;
+        setListening(false);
+        setInterim('');
+      },
+      onError: (msg) => window.alert(msg),
+    });
   };
 
   return (
@@ -47,28 +112,40 @@ export function Composer({ session }: { session: SessionMeta }) {
         </div>
       )}
 
-      <div className="composer-tools">
-        <div className="snippet-anchor">
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => setMenuOpen((v) => !v)}
-            disabled={ended}
-          >
-            🔖 Snippets
-          </button>
-          {menuOpen && (
-            <SnippetMenu
-              hasDraft={text.trim() !== ''}
-              onInsert={insertSnippet}
-              onSaveDraft={saveDraft}
-              onManage={() => setManagerOpen(true)}
-              onClose={() => setMenuOpen(false)}
-            />
-          )}
+      {images.length > 0 && (
+        <div className="composer-attachments">
+          {images.map((im, i) => (
+            <div key={i} className="attachment">
+              <img src={im.previewUrl} alt="attachment" />
+              <button
+                className="attachment-x"
+                aria-label="Remove image"
+                onClick={() => setImages((cur) => cur.filter((_, j) => j !== i))}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
         </div>
-      </div>
+      )}
+
+      {listening && (
+        <div className="composer-listening">
+          <span className="mic-dot" />
+          <span>{interim || 'Listening…'}</span>
+        </div>
+      )}
 
       <div className="composer-row">
+        <button
+          className="composer-icon"
+          onClick={() => setAddOpen(true)}
+          disabled={ended}
+          aria-label="Add to chat"
+        >
+          ＋
+        </button>
+
         <textarea
           className="composer-input"
           placeholder={
@@ -87,15 +164,45 @@ export function Composer({ session }: { session: SessionMeta }) {
             }
           }}
         />
-        <button
-          className="btn btn-accent send-btn"
-          onClick={submit}
-          disabled={!text.trim() || busy || ended}
-        >
+
+        {dictationSupported() && (
+          <button
+            className={`composer-icon ${listening ? 'on' : ''}`}
+            onClick={toggleDictation}
+            disabled={ended}
+            aria-label={listening ? 'Stop voice input' : 'Voice input'}
+          >
+            🎙
+          </button>
+        )}
+
+        <button className="btn btn-accent send-btn" onClick={submit} disabled={!canSend}>
           Send
         </button>
       </div>
 
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          void onFiles(e.target.files);
+          e.target.value = '';
+        }}
+      />
+
+      {addOpen && (
+        <AddSheet
+          hasDraft={text.trim() !== ''}
+          onPickImage={() => fileRef.current?.click()}
+          onInsertSnippet={insertSnippet}
+          onSaveDraft={saveDraft}
+          onManage={() => setManagerOpen(true)}
+          onClose={() => setAddOpen(false)}
+        />
+      )}
       {managerOpen && <SnippetManager onClose={() => setManagerOpen(false)} />}
     </div>
   );

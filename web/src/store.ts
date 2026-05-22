@@ -6,6 +6,7 @@ import type {
   SessionEvent,
   PermissionDecision,
   PermissionMode,
+  ChatImage,
 } from './protocol';
 import { api, type Snippet } from './api';
 
@@ -176,8 +177,8 @@ class PilotStore {
     this.raw({ t: 'create', ...opts });
   }
 
-  sendInput(sessionId: string, text: string): void {
-    this.raw({ t: 'input', sessionId, text });
+  sendInput(sessionId: string, text: string, images?: ChatImage[]): void {
+    this.raw({ t: 'input', sessionId, text, images });
   }
 
   interrupt(sessionId: string): void {

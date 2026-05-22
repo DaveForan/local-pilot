@@ -1,5 +1,5 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { PermissionMode } from './protocol';
+import type { PermissionMode, ChatImage } from './protocol';
 
 // --- SDK boundary -----------------------------------------------------------
 // The Agent SDK's exact TypeScript surface is verified separately. To keep the
@@ -9,7 +9,7 @@ import type { PermissionMode } from './protocol';
 
 interface SDKUserMessage {
   type: 'user';
-  message: { role: 'user'; content: string };
+  message: { role: 'user'; content: string | unknown[] };
   parent_tool_use_id: string | null;
 }
 
@@ -31,7 +31,13 @@ export type RunnerEvent =
   | { kind: 'assistant'; text: string }
   | { kind: 'thinking'; text: string }
   | { kind: 'tool_use'; toolId: string; name: string; input: unknown }
-  | { kind: 'tool_result'; toolId: string; content: string; isError: boolean }
+  | {
+      kind: 'tool_result';
+      toolId: string;
+      content: string;
+      isError: boolean;
+      images: ChatImage[];
+    }
   | { kind: 'system'; text: string }
   | {
       kind: 'result';
@@ -115,11 +121,22 @@ export class ClaudeRunner {
   }
 
   /** Queue a user message; lazily starts the underlying query on first send. */
-  send(text: string): void {
+  send(text: string, images: ChatImage[] = []): void {
     if (this.stopped) return;
+    // With images the SDK expects a content-block array, not a bare string.
+    const content =
+      images.length > 0
+        ? [
+            ...images.map((im) => ({
+              type: 'image',
+              source: { type: 'base64', media_type: im.mediaType, data: im.data },
+            })),
+            ...(text ? [{ type: 'text', text }] : []),
+          ]
+        : text;
     this.queue.push({
       type: 'user',
-      message: { role: 'user', content: text },
+      message: { role: 'user', content },
       parent_tool_use_id: null,
     });
     if (!this.started) this.start();
@@ -216,6 +233,7 @@ export class ClaudeRunner {
                 toolId: block.tool_use_id,
                 content: stringifyContent(block.content),
                 isError: block.is_error === true,
+                images: extractImages(block.content),
               });
             }
           }
@@ -273,11 +291,29 @@ function stringifyContent(content: unknown): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
     return content
-      .map((b: any) =>
-        b?.type === 'text' ? b.text : typeof b === 'string' ? b : JSON.stringify(b),
-      )
+      .map((b: any) => {
+        if (typeof b === 'string') return b;
+        if (b?.type === 'text') return b.text;
+        if (b?.type === 'image') return '[image]';
+        return JSON.stringify(b);
+      })
       .join('\n');
   }
   if (content == null) return '';
   return JSON.stringify(content, null, 2);
+}
+
+/** Pull base64 image blocks out of a tool result (e.g. screenshots). */
+function extractImages(content: unknown): ChatImage[] {
+  if (!Array.isArray(content)) return [];
+  const out: ChatImage[] = [];
+  for (const b of content as any[]) {
+    if (b?.type === 'image' && b.source?.type === 'base64' && typeof b.source.data === 'string') {
+      out.push({
+        mediaType: typeof b.source.media_type === 'string' ? b.source.media_type : 'image/png',
+        data: b.source.data,
+      });
+    }
+  }
+  return out;
 }
