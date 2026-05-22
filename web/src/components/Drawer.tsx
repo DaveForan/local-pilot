@@ -16,6 +16,8 @@ interface Props {
   sessions: SessionMeta[];
   activeId: string | null;
   active: SessionMeta | null;
+  /** Resolved model for the active session (may be recovered from history). */
+  activeModel: string | null;
   connected: boolean;
   theme: Theme;
   onSelect: (id: string) => void;
@@ -35,6 +37,7 @@ export function Drawer({
   sessions,
   activeId,
   active,
+  activeModel,
   connected,
   theme,
   onSelect,
@@ -98,6 +101,7 @@ export function Drawer({
           {active && (
             <div className="current-session">
               <div className="drawer-section-label">Current session</div>
+              <div className="cs-title">{active.title}</div>
               <div className="cs-row">
                 <span>Status</span>
                 <span>{STATUS[active.status].label}</span>
@@ -110,7 +114,7 @@ export function Drawer({
               </div>
               <div className="cs-row">
                 <span>Model</span>
-                <span className="cs-mono">{active.model ?? 'default'}</span>
+                <span className="cs-mono">{activeModel ?? 'not yet started'}</span>
               </div>
               <label className="cs-field">
                 <span>Permission mode</span>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { SessionEvent } from './protocol';
 import { usePilot, store } from './store';
 import { Drawer } from './components/Drawer';
 import { ChatPane } from './components/ChatPane';
@@ -6,13 +7,30 @@ import { NewSessionDialog } from './components/NewSessionDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { getTheme, applyTheme, type Theme } from './theme';
 
+/** Recover the resolved model from a session's history (the SDK reports it
+ *  in a "Session ready · model …" system line) for sessions that ran before
+ *  the model was tracked on the session itself. */
+function modelFromEvents(events: SessionEvent[] | undefined): string | null {
+  if (!events) return null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.kind === 'system') {
+      const m = /model\s+(\S+)/.exec(e.text);
+      if (m && m[1] !== 'default') return m[1];
+    }
+  }
+  return null;
+}
+
 export function App() {
-  const { sessions, activeId, connected, error } = usePilot();
+  const { sessions, activeId, events, connected, error } = usePilot();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(getTheme);
   const active = sessions.find((s) => s.id === activeId) ?? null;
+  const activeModel =
+    active?.model ?? (activeId ? modelFromEvents(events[activeId]) : null);
 
   // Open the right session when arriving from a push notification: via a
   // `?session=` deep link on a cold start, or a service-worker message when
@@ -38,12 +56,13 @@ export function App() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <button className="icon-btn" onClick={() => setDrawerOpen(true)} aria-label="Open menu">
-          ☰
-        </button>
-        <div className="topbar-title">{active ? active.title : 'local·pilot'}</div>
-      </header>
+      <button
+        className="floating-menu"
+        onClick={() => setDrawerOpen(true)}
+        aria-label="Open menu"
+      >
+        ☰
+      </button>
 
       <main className="main">
         <ChatPane session={active} />
@@ -54,6 +73,7 @@ export function App() {
         sessions={sessions}
         activeId={activeId}
         active={active}
+        activeModel={activeModel}
         connected={connected}
         theme={theme}
         onSelect={(id) => {

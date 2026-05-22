@@ -18,3 +18,14 @@ export function shortPath(p: string, max = 38): string {
   if (p.length <= max) return p;
   return '…' + p.slice(p.length - max + 1);
 }
+
+/** Render any value as readable text — strings pass through, objects as JSON. */
+export function formatValue(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}

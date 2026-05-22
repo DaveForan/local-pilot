@@ -40,7 +40,7 @@ export type RunnerEvent =
       costUsd: number | null;
       text: string;
     }
-  | { kind: 'claude_session'; claudeSessionId: string };
+  | { kind: 'claude_session'; claudeSessionId: string; model: string | null };
 
 export interface PermissionOutcome {
   behavior: 'allow' | 'deny';
@@ -176,7 +176,11 @@ export class ClaudeRunner {
       case 'system': {
         if (msg.subtype === 'init') {
           if (msg.session_id) {
-            this.opts.onEvent({ kind: 'claude_session', claudeSessionId: msg.session_id });
+            this.opts.onEvent({
+              kind: 'claude_session',
+              claudeSessionId: msg.session_id,
+              model: typeof msg.model === 'string' ? msg.model : null,
+            });
           }
           this.opts.onEvent({
             kind: 'system',

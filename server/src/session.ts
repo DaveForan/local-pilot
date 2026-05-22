@@ -140,12 +140,21 @@ export class Session {
 
   private handleRunnerEvent(event: RunnerEvent): void {
     switch (event.kind) {
-      case 'claude_session':
+      case 'claude_session': {
+        let changed = false;
         if (this.meta.claudeSessionId !== event.claudeSessionId) {
           this.meta.claudeSessionId = event.claudeSessionId;
-          this.hooks.onMeta(this.meta);
+          changed = true;
         }
+        // Pin the actually-resolved model so the UI can show it explicitly
+        // instead of a vague "default".
+        if (event.model && this.meta.model !== event.model) {
+          this.meta.model = event.model;
+          changed = true;
+        }
+        if (changed) this.hooks.onMeta(this.meta);
         break;
+      }
       case 'assistant':
         this.add({ kind: 'assistant', text: event.text });
         break;
