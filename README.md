@@ -88,11 +88,26 @@ Then open `https://<tailscale-host>.<tailnet>.ts.net` and sign in with the
 token. HTTPS via `tailscale serve` is also what makes push notifications and
 voice input work.
 
+## Voice input (optional)
+
+Conversation mode transcribes speech server-side with **whisper.cpp**. Build it
+once:
+
+```sh
+npm run whisper:install      # builds whisper.cpp + fetches the base.en model
+systemctl --user restart local-pilot
+```
+
+It needs `ffmpeg` (and `git` + a C compiler to build); `cmake` is fetched
+automatically if missing — no sudo. Everything lands in `~/.local-pilot/whisper`.
+Without it, conversation mode still reads replies aloud; only speech-to-text is off.
+
 ## Requirements
 
 - Node 20+
 - The `claude` CLI installed and logged in (the Agent SDK reuses its auth).
 - Linux with `systemd` (for the service install; otherwise run it directly).
+- `ffmpeg` — only for voice input.
 
 ## Configuration (environment variables)
 
@@ -103,6 +118,7 @@ voice input work.
 | `LOCAL_PILOT_DATA`         | `~/.local-pilot`     | Where sessions, snippets, MCP + push config are stored |
 | `LOCAL_PILOT_DEFAULT_CWD`  | `~/Projects`         | Default working directory for new sessions |
 | `LOCAL_PILOT_TOKEN`        | _(auto-generated)_   | Access token; overrides the generated one |
+| `LOCAL_PILOT_WHISPER_MODEL`| `base.en`            | Whisper model used for voice transcription |
 | `PUSH_SUBJECT`             | `mailto:local-pilot@localhost` | VAPID contact subject for web-push |
 
 ## Status
@@ -114,7 +130,8 @@ v1 is feature-complete:
   paper themes.
 - **Custom chat UI** — tool calls collapse into a per-turn activity log;
   permission prompts render as native, mobile-friendly cards.
-- **Images & voice** — attach pictures, dictate messages, and a conversation
+- **Images & voice** — attach pictures, speak to Claude (server-side Whisper
+  transcription), and a conversation
   mode that reads replies aloud and reopens the mic.
 - **Saved prompts**, an **MCP server editor**, and a skills list.
 - **Push notifications** when a session needs a decision or finishes a turn.

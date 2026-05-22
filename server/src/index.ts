@@ -9,6 +9,7 @@ import { WsHub } from './wsHub';
 import { createApiRouter } from './api';
 import { initPush } from './push';
 import { initAuth, requireAuth, handleLogin, handleLogout } from './auth';
+import { initWhisper } from './whisper';
 
 async function main(): Promise<void> {
   await ensureDirs();
@@ -22,6 +23,12 @@ async function main(): Promise<void> {
   } else {
     console.log(`[auth] access token loaded from ${auth.source} — see ${paths.token}`);
   }
+
+  console.log(
+    initWhisper()
+      ? '[whisper] speech transcription ready'
+      : '[whisper] not installed — run `npm run whisper:install` for voice input',
+  );
 
   const manager = new SessionManager();
   await manager.init();

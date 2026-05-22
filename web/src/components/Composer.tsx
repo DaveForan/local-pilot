@@ -1,8 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { SessionMeta } from '../protocol';
 import { store } from '../store';
+import { api } from '../api';
 import { prepareImage, type PreparedImage } from '../image';
-import { startDictation, dictationSupported } from '../speech';
+import { recordUtterance, recordingSupported } from '../audio';
 import { AddSheet } from './AddSheet';
 import { SnippetManager } from './SnippetManager';
 
@@ -17,9 +18,8 @@ interface Props {
   onToggleVoiceMode: () => void;
 }
 
-// Conversation-mode auto-send timing.
-const SILENCE_MS = 1800; // a gap this long means "you've stopped talking"
-const GRACE_MS = 2200; // cancelable window before the reply is actually sent
+/** Cancelable window after a transcript lands, before it is auto-sent. */
+const GRACE_MS = 2200;
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   { session, voiceMode, onToggleVoiceMode },
@@ -30,47 +30,39 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [addOpen, setAddOpen] = useState(false);
   const [managerOpen, setManagerOpen] = useState(false);
   const [listening, setListening] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const [pendingSend, setPendingSend] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
-  const stopDictationRef = useRef<(() => void) | null>(null);
-  const silenceTimer = useRef<number | null>(null);
+  const recordCancel = useRef<(() => void) | null>(null);
   const graceTimer = useRef<number | null>(null);
-  // Indirections so dictation callbacks and timers always see fresh state.
-  const handlersRef = useRef<{ onTranscript: (full: string) => void }>({
-    onTranscript: () => {},
-  });
   const submitRef = useRef<() => void>(() => {});
-  const draftRef = useRef<{ text: string; hasImages: boolean }>({ text: '', hasImages: false });
-  draftRef.current = { text, hasImages: images.length > 0 };
+  // Indirection so the recorder's callbacks always run the latest logic.
+  const ctlRef = useRef<{
+    onClip: (audio: Blob) => void;
+    onNoSpeech: () => void;
+    onError: (message: string) => void;
+  }>({ onClip: () => {}, onNoSpeech: () => {}, onError: () => {} });
 
   const busy = session.status === 'running' || session.status === 'awaiting_permission';
   const ended = session.status === 'ended';
   const canSend = !busy && !ended && (text.trim() !== '' || images.length > 0);
 
-  const clearAutoSend = (): void => {
-    if (silenceTimer.current !== null) {
-      window.clearTimeout(silenceTimer.current);
-      silenceTimer.current = null;
-    }
+  const stopVoice = (): void => {
+    recordCancel.current?.();
+    recordCancel.current = null;
     if (graceTimer.current !== null) {
       window.clearTimeout(graceTimer.current);
       graceTimer.current = null;
     }
-    setPendingSend(false);
-  };
-
-  const stopDictation = (): void => {
-    stopDictationRef.current?.();
-    stopDictationRef.current = null;
     setListening(false);
-    clearAutoSend();
+    setTranscribing(false);
+    setPendingSend(false);
   };
 
   const submit = (): void => {
     if (!canSend) return;
-    clearAutoSend();
-    stopDictation();
+    stopVoice();
     store.sendInput(
       session.id,
       text.trim(),
@@ -83,68 +75,92 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   };
   submitRef.current = submit;
 
-  // Conversation mode: after a pause, hand the spoken reply off on its own.
-  const armAutoSend = (): void => {
-    clearAutoSend();
-    if (!voiceMode) return;
-    silenceTimer.current = window.setTimeout(() => {
-      silenceTimer.current = null;
-      if (draftRef.current.text.trim() === '' && !draftRef.current.hasImages) return;
-      setPendingSend(true);
-      graceTimer.current = window.setTimeout(() => {
-        graceTimer.current = null;
-        setPendingSend(false);
-        submitRef.current();
-      }, GRACE_MS);
-    }, SILENCE_MS);
-  };
-
-  // Re-point the dictation callback at fresh logic every render. The
-  // transcript replaces the field — never appends — so nothing repeats.
-  handlersRef.current.onTranscript = (full) => {
-    setText(full);
-    armAutoSend(); // user is speaking — (re)start the silence countdown
-  };
-
-  const startDict = (quiet: boolean): void => {
-    if (stopDictationRef.current) return; // already listening
+  // Record one spoken utterance, then transcribe it server-side.
+  const beginUtterance = (): void => {
+    if (!voiceMode || busy || ended || !recordingSupported()) return;
+    if (recordCancel.current) return; // already recording
+    setPendingSend(false);
+    setTranscribing(false);
     setListening(true);
-    stopDictationRef.current = startDictation({
-      onTranscript: (full) => handlersRef.current.onTranscript(full),
-      onEnd: () => {
-        stopDictationRef.current = null;
-        setListening(false);
-        clearAutoSend();
-      },
-      onError: (msg) => {
-        if (!quiet) window.alert(msg);
-      },
+    recordCancel.current = recordUtterance({
+      onSpeechEnd: (audio) => ctlRef.current.onClip(audio),
+      onNoSpeech: () => ctlRef.current.onNoSpeech(),
+      onError: (m) => ctlRef.current.onError(m),
     });
+  };
+
+  // Re-point the recorder callbacks at fresh logic every render.
+  ctlRef.current.onClip = (audio) => {
+    recordCancel.current = null;
+    setListening(false);
+    setTranscribing(true);
+    api
+      .transcribe(audio)
+      .then((raw) => {
+        setTranscribing(false);
+        const spoken = raw.trim();
+        if (!spoken) {
+          beginUtterance(); // nothing recognised — keep listening
+          return;
+        }
+        setText((cur) => (cur.trim() ? `${cur.trim()} ${spoken}` : spoken));
+        setPendingSend(true);
+        graceTimer.current = window.setTimeout(() => {
+          graceTimer.current = null;
+          setPendingSend(false);
+          submitRef.current();
+        }, GRACE_MS);
+      })
+      .catch((e) => {
+        setTranscribing(false);
+        if (/not installed/i.test((e as Error).message ?? '')) {
+          window.alert('Voice transcription is not installed on the server.');
+          return;
+        }
+        beginUtterance(); // transient failure — keep listening
+      });
+  };
+  ctlRef.current.onNoSpeech = () => {
+    recordCancel.current = null;
+    setListening(false);
+    beginUtterance(); // nothing said — keep the mic ready
+  };
+  ctlRef.current.onError = () => {
+    recordCancel.current = null;
+    setListening(false);
   };
 
   // Conversation mode reopens the mic once Claude has finished speaking.
   useImperativeHandle(ref, () => ({
     beginVoiceReply: () => {
-      if (!busy && !ended && dictationSupported()) startDict(true);
+      if (!busy && !ended) beginUtterance();
     },
   }));
 
-  // Conversation mode is hands-free: entering it opens the mic right away;
-  // leaving it stops listening. There is no manual mic button.
+  // Entering conversation mode starts listening; leaving it stops everything.
   useEffect(() => {
-    if (voiceMode) {
-      if (!busy && !ended) startDict(true);
-    } else {
-      stopDictation();
+    if (!voiceMode) {
+      stopVoice();
+      return;
     }
+    if (busy || ended) return;
+    api
+      .transcribeStatus()
+      .then((s) => {
+        if (s.available) beginUtterance();
+        else
+          window.alert(
+            'Voice transcription is not installed on the server — run `npm run whisper:install`.',
+          );
+      })
+      .catch(() => beginUtterance());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceMode]);
 
-  // Tidy up timers and the mic if the component goes away.
+  // Tidy up the recorder and timers if the component goes away.
   useEffect(() => {
     return () => {
-      stopDictationRef.current?.();
-      if (silenceTimer.current !== null) window.clearTimeout(silenceTimer.current);
+      recordCancel.current?.();
       if (graceTimer.current !== null) window.clearTimeout(graceTimer.current);
     };
   }, []);
@@ -229,9 +245,24 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         <div className="composer-pending">
           <span className="mic-dot" />
           <span>Sending your reply…</span>
-          <button className="pending-cancel" onClick={clearAutoSend}>
+          <button
+            className="pending-cancel"
+            onClick={() => {
+              if (graceTimer.current !== null) {
+                window.clearTimeout(graceTimer.current);
+                graceTimer.current = null;
+              }
+              setPendingSend(false);
+              beginUtterance();
+            }}
+          >
             Keep talking
           </button>
+        </div>
+      ) : transcribing ? (
+        <div className="composer-listening">
+          <span className="spinner" />
+          <span>Transcribing…</span>
         </div>
       ) : (
         listening && (

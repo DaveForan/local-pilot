@@ -8,6 +8,7 @@ import { readMcpServers, writeMcpServers } from './mcpConfig';
 import type { McpServers } from './mcpConfig';
 import { vapidPublicKey, addSubscription, removeSubscription } from './push';
 import type { PushSubscriptionRecord } from './push';
+import { transcribe, whisperReady } from './whisper';
 
 /** REST endpoints for everything that is not the live session stream. */
 export function createApiRouter() {
@@ -59,6 +60,32 @@ export function createApiRouter() {
   router.get('/claude/skills', async (_req, res) => {
     res.json(await listSkills());
   });
+
+  // --- speech transcription (whisper.cpp) ----------------------------------
+  router.get('/transcribe/status', (_req, res) => {
+    res.json({ available: whisperReady() });
+  });
+
+  router.post(
+    '/transcribe',
+    express.raw({ type: ['audio/*', 'application/octet-stream'], limit: '25mb' }),
+    async (req, res) => {
+      if (!whisperReady()) {
+        res.status(503).json({ error: 'Speech transcription is not installed on the server' });
+        return;
+      }
+      const audio = req.body;
+      if (!Buffer.isBuffer(audio) || audio.length === 0) {
+        res.status(400).json({ error: 'No audio received' });
+        return;
+      }
+      try {
+        res.json({ text: await transcribe(audio) });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    },
+  );
 
   // --- MCP servers (local-pilot's own layer) -------------------------------
   router.get('/mcp', async (_req, res) => {

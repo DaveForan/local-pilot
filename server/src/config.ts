@@ -8,6 +8,9 @@ export const HOST = process.env.HOST ?? '127.0.0.1';
 
 const DATA_DIR = process.env.LOCAL_PILOT_DATA ?? path.join(os.homedir(), '.local-pilot');
 
+/** Whisper model used for server-side speech transcription. */
+export const WHISPER_MODEL = process.env.LOCAL_PILOT_WHISPER_MODEL ?? 'base.en';
+
 export const paths = {
   data: DATA_DIR,
   sessions: path.join(DATA_DIR, 'sessions'),
@@ -20,6 +23,9 @@ export const paths = {
   pushSubs: path.join(DATA_DIR, 'push-subscriptions.json'),
   // Access token clients must present to use the API.
   token: path.join(DATA_DIR, 'token'),
+  // Whisper: install-whisper.sh writes the resolved binary path to `binpath`.
+  whisperBinPath: path.join(DATA_DIR, 'whisper', 'binpath'),
+  whisperModel: path.join(DATA_DIR, 'whisper', 'models', `ggml-${WHISPER_MODEL}.bin`),
   claudeDir: path.join(os.homedir(), '.claude'),
   claudeSettings: path.join(os.homedir(), '.claude', 'settings.json'),
   // The server runs from server/, so the built UI sits one level up.

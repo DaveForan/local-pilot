@@ -21,6 +21,27 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return (await res.json()) as T;
 }
 
+/** Upload an audio clip for server-side Whisper transcription. */
+async function transcribeAudio(audio: Blob): Promise<string> {
+  const res = await fetch('/api/transcribe', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': audio.type || 'audio/webm' },
+    body: audio,
+  });
+  if (!res.ok) {
+    let message = `transcribe → ${res.status}`;
+    try {
+      const data = (await res.json()) as { error?: string };
+      if (data?.error) message = data.error;
+    } catch {
+      /* no JSON body */
+    }
+    throw new Error(message);
+  }
+  return ((await res.json()) as { text: string }).text;
+}
+
 export interface Snippet {
   id: string;
   title: string;
@@ -62,6 +83,8 @@ export const api = {
   auth: () => req<{ ok: true }>('GET', '/auth'),
   login: (token: string) => req<{ ok: true }>('POST', '/login', { token }),
   logout: () => req<{ ok: true }>('POST', '/logout'),
+  transcribeStatus: () => req<{ available: boolean }>('GET', '/transcribe/status'),
+  transcribe: transcribeAudio,
   snippets: () => req<Snippet[]>('GET', '/snippets'),
   addSnippet: (title: string, body: string) => req<Snippet>('POST', '/snippets', { title, body }),
   deleteSnippet: (id: string) => req<{ ok: true }>('DELETE', `/snippets/${id}`),
