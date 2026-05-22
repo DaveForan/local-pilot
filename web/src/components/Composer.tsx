@@ -78,7 +78,7 @@ export function Composer({ session }: { session: SessionMeta }) {
           }
           value={text}
           disabled={ended}
-          rows={1}
+          rows={2}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
