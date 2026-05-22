@@ -1028,34 +1028,6 @@ textarea {
   color: var(--accent);
 }
 
-/* the mic button — the obvious voice affordance */
-.composer-mic {
-  flex-shrink: 0;
-  width: 48px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 12px;
-  cursor: pointer;
-}
-.composer-mic:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-.composer-mic:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.composer-mic.on {
-  background: var(--danger);
-  border-color: transparent;
-  color: var(--on-accent);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
 /* the cancelable "about to send" strip in conversation mode */
 .composer-pending {
   display: flex;

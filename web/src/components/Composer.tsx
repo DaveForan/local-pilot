@@ -21,28 +21,11 @@ interface Props {
 const SILENCE_MS = 1800; // a gap this long means "you've stopped talking"
 const GRACE_MS = 2200; // cancelable window before the reply is actually sent
 
-/** Append `b` to `a` with a single separating space. */
-function joinText(a: string, b: string): string {
-  return a.trim() ? `${a.replace(/\s+$/, '')} ${b}` : b;
-}
-
-function MicIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"
-      />
-    </svg>
-  );
-}
-
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   { session, voiceMode, onToggleVoiceMode },
   ref,
 ) {
   const [text, setText] = useState('');
-  const [interim, setInterim] = useState('');
   const [images, setImages] = useState<PreparedImage[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [managerOpen, setManagerOpen] = useState(false);
@@ -54,8 +37,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const silenceTimer = useRef<number | null>(null);
   const graceTimer = useRef<number | null>(null);
   // Indirections so dictation callbacks and timers always see fresh state.
-  const handlersRef = useRef<{ onText: (chunk: string, isFinal: boolean) => void }>({
-    onText: () => {},
+  const handlersRef = useRef<{ onTranscript: (full: string) => void }>({
+    onTranscript: () => {},
   });
   const submitRef = useRef<() => void>(() => {});
   const draftRef = useRef<{ text: string; hasImages: boolean }>({ text: '', hasImages: false });
@@ -81,7 +64,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     stopDictationRef.current?.();
     stopDictationRef.current = null;
     setListening(false);
-    setInterim('');
     clearAutoSend();
   };
 
@@ -97,7 +79,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         : undefined,
     );
     setText('');
-    setInterim('');
     setImages([]);
   };
   submitRef.current = submit;
@@ -118,10 +99,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     }, SILENCE_MS);
   };
 
-  // Re-point the dictation callback at fresh logic every render.
-  handlersRef.current.onText = (chunk, isFinal) => {
-    if (isFinal) setText((cur) => joinText(cur, chunk));
-    else setInterim(chunk);
+  // Re-point the dictation callback at fresh logic every render. The
+  // transcript replaces the field — never appends — so nothing repeats.
+  handlersRef.current.onTranscript = (full) => {
+    setText(full);
     armAutoSend(); // user is speaking — (re)start the silence countdown
   };
 
@@ -129,11 +110,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     if (stopDictationRef.current) return; // already listening
     setListening(true);
     stopDictationRef.current = startDictation({
-      onText: (chunk, isFinal) => handlersRef.current.onText(chunk, isFinal),
+      onTranscript: (full) => handlersRef.current.onTranscript(full),
       onEnd: () => {
         stopDictationRef.current = null;
         setListening(false);
-        setInterim('');
         clearAutoSend();
       },
       onError: (msg) => {
@@ -149,8 +129,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     },
   }));
 
-  // Conversation mode is hands-free: entering it opens the mic right away
-  // (so there's no need for a mic button); leaving it stops listening.
+  // Conversation mode is hands-free: entering it opens the mic right away;
+  // leaving it stops listening. There is no manual mic button.
   useEffect(() => {
     if (voiceMode) {
       if (!busy && !ended) startDict(true);
@@ -168,15 +148,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       if (graceTimer.current !== null) window.clearTimeout(graceTimer.current);
     };
   }, []);
-
-  const toggleDictation = (): void => {
-    if (listening) {
-      if (interim) setText((t) => joinText(t, interim));
-      stopDictation();
-    } else {
-      startDict(false);
-    }
-  };
 
   const insertSnippet = (body: string): void => {
     setText((cur) => (cur.trim() ? `${cur.replace(/\s+$/, '')}\n${body}` : body));
@@ -266,7 +237,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         listening && (
           <div className="composer-listening">
             <span className="mic-dot" />
-            <span>{interim || 'Listening… speak now'}</span>
+            <span>Listening… speak now</span>
           </div>
         )
       )}
@@ -299,18 +270,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             }
           }}
         />
-
-        {dictationSupported() && !voiceMode && (
-          <button
-            type="button"
-            className={`composer-mic ${listening ? 'on' : ''}`}
-            onClick={toggleDictation}
-            disabled={ended}
-            aria-label={listening ? 'Stop voice input' : 'Start voice input'}
-          >
-            <MicIcon />
-          </button>
-        )}
 
         <button className="btn btn-accent send-btn" onClick={submit} disabled={!canSend}>
           Send

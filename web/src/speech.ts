@@ -26,15 +26,17 @@ export function dictationSupported(): boolean {
 }
 
 export interface DictationHandlers {
-  /** Fires with finalised text (and interim text as it is recognised). */
-  onText: (text: string, isFinal: boolean) => void;
+  /** The complete transcript so far — replaces, never appends. */
+  onTranscript: (text: string) => void;
   onEnd: () => void;
   onError: (message: string) => void;
 }
 
 /** Start dictation; returns a function that stops it. Recognition is kept
  *  alive across the browser's silence/timeout cutoffs by auto-restarting, so
- *  long dictation does not quietly drop. */
+ *  long dictation does not quietly drop. The transcript is rebuilt from the
+ *  full results list on every event — idempotent, so a browser re-firing
+ *  results can never duplicate a phrase. */
 export function startDictation(handlers: DictationHandlers): () => void {
   const Ctor = recognitionCtor();
   if (!Ctor) {
@@ -43,21 +45,30 @@ export function startDictation(handlers: DictationHandlers): () => void {
     return () => {};
   }
   let stopped = false;
+  let committed = ''; // finalised text banked from earlier (restarted) segments
+  let segmentFinal = ''; // finalised text of the current recognition segment
   const rec = new Ctor();
   rec.continuous = true;
   rec.interimResults = true;
   rec.lang = navigator.language || 'en-US';
 
+  const join = (...parts: string[]): string =>
+    parts
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .join(' ');
+
   rec.onresult = (e: any) => {
-    let interim = '';
-    let final = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
+    let finalText = '';
+    let interimText = '';
+    for (let i = 0; i < e.results.length; i++) {
       const r = e.results[i];
-      if (r.isFinal) final += r[0].transcript;
-      else interim += r[0].transcript;
+      const t = r[0]?.transcript ?? '';
+      if (r.isFinal) finalText += t;
+      else interimText += t;
     }
-    if (final) handlers.onText(final, true);
-    else if (interim) handlers.onText(interim, false);
+    segmentFinal = finalText;
+    handlers.onTranscript(join(committed, finalText, interimText));
   };
 
   rec.onerror = (e: any) => {
@@ -77,7 +88,10 @@ export function startDictation(handlers: DictationHandlers): () => void {
       handlers.onEnd();
       return;
     }
-    // The browser ends recognition on pauses/timeouts — restart to stay live.
+    // Browser ended the segment (pause/timeout). Bank its finalised text and
+    // restart, so the user keeps talking without old audio being re-read.
+    committed = join(committed, segmentFinal);
+    segmentFinal = '';
     window.setTimeout(() => {
       if (stopped) return;
       try {
