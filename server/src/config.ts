@@ -26,6 +26,9 @@ export const paths = {
   // Whisper: install-whisper.sh writes the resolved binary path to `binpath`.
   whisperBinPath: path.join(DATA_DIR, 'whisper', 'binpath'),
   whisperModel: path.join(DATA_DIR, 'whisper', 'models', `ggml-${WHISPER_MODEL}.bin`),
+  // Piper TTS: install-piper.sh writes the binary + voice paths.
+  piperBinPath: path.join(DATA_DIR, 'piper', 'binpath'),
+  piperVoicePath: path.join(DATA_DIR, 'piper', 'voicepath'),
   claudeDir: path.join(os.homedir(), '.claude'),
   claudeSettings: path.join(os.homedir(), '.claude', 'settings.json'),
   // The server runs from server/, so the built UI sits one level up.

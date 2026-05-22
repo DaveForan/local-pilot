@@ -9,6 +9,7 @@ import type { McpServers } from './mcpConfig';
 import { vapidPublicKey, addSubscription, removeSubscription } from './push';
 import type { PushSubscriptionRecord } from './push';
 import { transcribe, whisperReady } from './whisper';
+import { synthesize, ttsReady } from './tts';
 
 /** REST endpoints for everything that is not the live session stream. */
 export function createApiRouter() {
@@ -86,6 +87,31 @@ export function createApiRouter() {
       }
     },
   );
+
+  // --- text-to-speech (Piper) ----------------------------------------------
+  router.get('/tts/status', (_req, res) => {
+    res.json({ available: ttsReady() });
+  });
+
+  router.post('/tts', async (req, res) => {
+    if (!ttsReady()) {
+      res.status(503).json({ error: 'Text-to-speech is not installed on the server' });
+      return;
+    }
+    const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+    if (!text) {
+      res.status(400).json({ error: 'text is required' });
+      return;
+    }
+    try {
+      const wav = await synthesize(text);
+      res.setHeader('Content-Type', 'audio/wav');
+      res.setHeader('Cache-Control', 'no-store');
+      res.send(wav);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
 
   // --- MCP servers (local-pilot's own layer) -------------------------------
   router.get('/mcp', async (_req, res) => {

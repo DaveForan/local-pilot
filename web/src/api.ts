@@ -85,6 +85,7 @@ export const api = {
   logout: () => req<{ ok: true }>('POST', '/logout'),
   transcribeStatus: () => req<{ available: boolean }>('GET', '/transcribe/status'),
   transcribe: transcribeAudio,
+  ttsStatus: () => req<{ available: boolean }>('GET', '/tts/status'),
   snippets: () => req<Snippet[]>('GET', '/snippets'),
   addSnippet: (title: string, body: string) => req<Snippet>('POST', '/snippets', { title, body }),
   deleteSnippet: (id: string) => req<{ ok: true }>('DELETE', `/snippets/${id}`),

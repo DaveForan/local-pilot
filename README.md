@@ -88,19 +88,24 @@ Then open `https://<tailscale-host>.<tailnet>.ts.net` and sign in with the
 token. HTTPS via `tailscale serve` is also what makes push notifications and
 voice input work.
 
-## Voice input (optional)
+## Voice (optional)
 
-Conversation mode transcribes speech server-side with **whisper.cpp**. Build it
-once:
+Conversation mode runs **fully offline** on the box, with no paid services:
 
 ```sh
-npm run whisper:install      # builds whisper.cpp + fetches the base.en model
+npm run whisper:install      # speech-to-text: whisper.cpp + base.en model
+npm run piper:install        # text-to-speech: Piper + en_US-amy-medium voice
 systemctl --user restart local-pilot
 ```
 
-It needs `ffmpeg` (and `git` + a C compiler to build); `cmake` is fetched
-automatically if missing — no sudo. Everything lands in `~/.local-pilot/whisper`.
-Without it, conversation mode still reads replies aloud; only speech-to-text is off.
+Whisper needs `ffmpeg` (and `git` + a C compiler to build); `cmake` is fetched
+automatically if missing — no sudo. Piper ships as a prebuilt binary, also no
+sudo. Both land in `~/.local-pilot/`. Pick a different Piper voice with
+`LOCAL_PILOT_PIPER_VOICE=en_US-ryan-high` (and re-run `piper:install`); pick a
+larger Whisper model with `LOCAL_PILOT_WHISPER_MODEL=small.en`.
+
+Without these the browser's built-in speech recognition and synthesis are used
+as fallbacks — voice still works, just less accurate / more robotic.
 
 ## Requirements
 
@@ -119,6 +124,7 @@ Without it, conversation mode still reads replies aloud; only speech-to-text is 
 | `LOCAL_PILOT_DEFAULT_CWD`  | `~/Projects`         | Default working directory for new sessions |
 | `LOCAL_PILOT_TOKEN`        | _(auto-generated)_   | Access token; overrides the generated one |
 | `LOCAL_PILOT_WHISPER_MODEL`| `base.en`            | Whisper model used for voice transcription |
+| `LOCAL_PILOT_PIPER_VOICE`  | `en_US-amy-medium`   | Piper voice used for read-aloud |
 | `PUSH_SUBJECT`             | `mailto:local-pilot@localhost` | VAPID contact subject for web-push |
 
 ## Status
@@ -131,8 +137,8 @@ v1 is feature-complete:
 - **Custom chat UI** — tool calls collapse into a per-turn activity log;
   permission prompts render as native, mobile-friendly cards.
 - **Images & voice** — attach pictures, speak to Claude (server-side Whisper
-  transcription), and a conversation
-  mode that reads replies aloud and reopens the mic.
+  STT) and have replies read back in a natural neural voice (server-side
+  Piper TTS); a conversation mode loops it all hands-free.
 - **Saved prompts**, an **MCP server editor**, and a skills list.
 - **Push notifications** when a session needs a decision or finishes a turn.
 - Runs as a **systemd service**.

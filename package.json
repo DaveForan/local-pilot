@@ -15,7 +15,8 @@
     "start": "npm -w server run start",
     "typecheck": "npm -w server run typecheck && npm -w web run typecheck",
     "service:install": "bash scripts/install-service.sh",
-    "whisper:install": "bash scripts/install-whisper.sh"
+    "whisper:install": "bash scripts/install-whisper.sh",
+    "piper:install": "bash scripts/install-piper.sh"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

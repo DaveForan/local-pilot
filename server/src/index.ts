@@ -10,6 +10,7 @@ import { createApiRouter } from './api';
 import { initPush } from './push';
 import { initAuth, requireAuth, handleLogin, handleLogout } from './auth';
 import { initWhisper } from './whisper';
+import { initTts } from './tts';
 
 async function main(): Promise<void> {
   await ensureDirs();
@@ -28,6 +29,11 @@ async function main(): Promise<void> {
     initWhisper()
       ? '[whisper] speech transcription ready'
       : '[whisper] not installed — run `npm run whisper:install` for voice input',
+  );
+  console.log(
+    initTts()
+      ? '[piper] text-to-speech ready'
+      : '[piper] not installed — run `npm run piper:install` for natural read-aloud',
   );
 
   const manager = new SessionManager();
