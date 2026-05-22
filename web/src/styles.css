@@ -186,10 +186,26 @@ textarea {
   flex-direction: column;
 }
 .session-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 600;
+}
+.session-title-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.needs-you-pill {
+  flex-shrink: 0;
+  background: var(--warn);
+  color: #1a1206;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 5px;
 }
 .session-sub {
   font-size: 11px;
@@ -473,6 +489,57 @@ textarea {
 }
 .perm-resolved.denied {
   color: var(--danger);
+}
+
+.perm-edit {
+  display: block;
+  width: 100%;
+  background: #0c0c12;
+  border: none;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  padding: 10px 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: #cfcfe0;
+  resize: vertical;
+  outline: none;
+}
+.perm-edit:focus {
+  background: #0a0a10;
+}
+.perm-json-err {
+  color: var(--danger);
+  font-size: 12px;
+  padding: 8px 14px;
+}
+
+.perm-suggest {
+  border-top: 1px solid var(--line-soft);
+}
+.perm-suggest-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--accent-2);
+  padding: 8px 14px 0;
+}
+.perm-suggest .code {
+  border-top: none;
+}
+
+/* a still-pending permission card gently pulses for attention */
+.ev-permission.pending-pulse {
+  animation: perm-pulse 2s ease-in-out infinite;
+}
+@keyframes perm-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 182, 72, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(255, 182, 72, 0.16);
+  }
 }
 
 /* ===== markdown ========================================================== */

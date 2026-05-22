@@ -48,6 +48,8 @@ export type SessionEvent =
       requestId: string;
       toolName: string;
       input: unknown;
+      /** Optional suggestions surfaced by the SDK (e.g. proposed input edits). */
+      suggestions?: unknown;
       status: 'pending' | 'allowed' | 'denied';
       resolution: string | null;
     };

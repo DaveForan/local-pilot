@@ -47,7 +47,12 @@ export function Sidebar({ sessions, activeId, open, onSelect, onNew, onClose }: 
                   title={st.label}
                 />
                 <span className="session-meta">
-                  <span className="session-title">{s.title}</span>
+                  <span className="session-title">
+                    <span className="session-title-text">{s.title}</span>
+                    {s.status === 'awaiting_permission' && (
+                      <span className="needs-you-pill">Needs you</span>
+                    )}
+                  </span>
                   <span className="session-sub">{shortPath(s.cwd)}</span>
                 </span>
                 <span className="session-time">{relativeTime(s.lastActivity)}</span>

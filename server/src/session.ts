@@ -190,6 +190,7 @@ export class Session {
       requestId,
       toolName,
       input,
+      suggestions,
       status: 'pending',
       resolution: null,
     }) as PermissionEvent;
