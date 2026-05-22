@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { SessionMeta } from '../protocol';
 import { store } from '../store';
 import { prepareImage, type PreparedImage } from '../image';
@@ -17,9 +17,24 @@ interface Props {
   onToggleVoiceMode: () => void;
 }
 
+// Conversation-mode auto-send timing.
+const SILENCE_MS = 1800; // a gap this long means "you've stopped talking"
+const GRACE_MS = 2200; // cancelable window before the reply is actually sent
+
 /** Append `b` to `a` with a single separating space. */
 function joinText(a: string, b: string): string {
   return a.trim() ? `${a.replace(/\s+$/, '')} ${b}` : b;
+}
+
+function MicIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"
+      />
+    </svg>
+  );
 }
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
@@ -32,53 +47,47 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [addOpen, setAddOpen] = useState(false);
   const [managerOpen, setManagerOpen] = useState(false);
   const [listening, setListening] = useState(false);
+  const [pendingSend, setPendingSend] = useState(false);
+
   const fileRef = useRef<HTMLInputElement>(null);
   const stopDictationRef = useRef<(() => void) | null>(null);
+  const silenceTimer = useRef<number | null>(null);
+  const graceTimer = useRef<number | null>(null);
+  // Indirections so dictation callbacks and timers always see fresh state.
+  const handlersRef = useRef<{ onText: (chunk: string, isFinal: boolean) => void }>({
+    onText: () => {},
+  });
+  const submitRef = useRef<() => void>(() => {});
+  const draftRef = useRef<{ text: string; hasImages: boolean }>({ text: '', hasImages: false });
+  draftRef.current = { text, hasImages: images.length > 0 };
 
   const busy = session.status === 'running' || session.status === 'awaiting_permission';
   const ended = session.status === 'ended';
   const canSend = !busy && !ended && (text.trim() !== '' || images.length > 0);
+
+  const clearAutoSend = (): void => {
+    if (silenceTimer.current !== null) {
+      window.clearTimeout(silenceTimer.current);
+      silenceTimer.current = null;
+    }
+    if (graceTimer.current !== null) {
+      window.clearTimeout(graceTimer.current);
+      graceTimer.current = null;
+    }
+    setPendingSend(false);
+  };
 
   const stopDictation = (): void => {
     stopDictationRef.current?.();
     stopDictationRef.current = null;
     setListening(false);
     setInterim('');
+    clearAutoSend();
   };
-
-  /** Start dictation. `quiet` suppresses error alerts (used by the auto loop). */
-  const startDict = (quiet: boolean): void => {
-    setListening(true);
-    stopDictationRef.current = startDictation({
-      onText: (t, isFinal) => {
-        if (isFinal) {
-          setText((cur) => joinText(cur, t));
-          setInterim('');
-        } else {
-          setInterim(t);
-        }
-      },
-      onEnd: () => {
-        stopDictationRef.current = null;
-        setListening(false);
-        setInterim('');
-      },
-      onError: (msg) => {
-        setListening(false);
-        if (!quiet) window.alert(msg);
-      },
-    });
-  };
-
-  // Conversation mode reopens the mic once Claude has finished speaking.
-  useImperativeHandle(ref, () => ({
-    beginVoiceReply: () => {
-      if (!listening && !busy && !ended && dictationSupported()) startDict(true);
-    },
-  }));
 
   const submit = (): void => {
     if (!canSend) return;
+    clearAutoSend();
     stopDictation();
     store.sendInput(
       session.id,
@@ -90,6 +99,83 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     setText('');
     setInterim('');
     setImages([]);
+  };
+  submitRef.current = submit;
+
+  // Conversation mode: after a pause, hand the spoken reply off on its own.
+  const armAutoSend = (): void => {
+    clearAutoSend();
+    if (!voiceMode) return;
+    silenceTimer.current = window.setTimeout(() => {
+      silenceTimer.current = null;
+      if (draftRef.current.text.trim() === '' && !draftRef.current.hasImages) return;
+      setPendingSend(true);
+      graceTimer.current = window.setTimeout(() => {
+        graceTimer.current = null;
+        setPendingSend(false);
+        submitRef.current();
+      }, GRACE_MS);
+    }, SILENCE_MS);
+  };
+
+  // Re-point the dictation callback at fresh logic every render.
+  handlersRef.current.onText = (chunk, isFinal) => {
+    if (isFinal) setText((cur) => joinText(cur, chunk));
+    else setInterim(chunk);
+    armAutoSend(); // user is speaking — (re)start the silence countdown
+  };
+
+  const startDict = (quiet: boolean): void => {
+    if (stopDictationRef.current) return; // already listening
+    setListening(true);
+    stopDictationRef.current = startDictation({
+      onText: (chunk, isFinal) => handlersRef.current.onText(chunk, isFinal),
+      onEnd: () => {
+        stopDictationRef.current = null;
+        setListening(false);
+        setInterim('');
+        clearAutoSend();
+      },
+      onError: (msg) => {
+        if (!quiet) window.alert(msg);
+      },
+    });
+  };
+
+  // Conversation mode reopens the mic once Claude has finished speaking.
+  useImperativeHandle(ref, () => ({
+    beginVoiceReply: () => {
+      if (!busy && !ended && dictationSupported()) startDict(true);
+    },
+  }));
+
+  // Conversation mode is hands-free: entering it opens the mic right away
+  // (so there's no need for a mic button); leaving it stops listening.
+  useEffect(() => {
+    if (voiceMode) {
+      if (!busy && !ended) startDict(true);
+    } else {
+      stopDictation();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceMode]);
+
+  // Tidy up timers and the mic if the component goes away.
+  useEffect(() => {
+    return () => {
+      stopDictationRef.current?.();
+      if (silenceTimer.current !== null) window.clearTimeout(silenceTimer.current);
+      if (graceTimer.current !== null) window.clearTimeout(graceTimer.current);
+    };
+  }, []);
+
+  const toggleDictation = (): void => {
+    if (listening) {
+      if (interim) setText((t) => joinText(t, interim));
+      stopDictation();
+    } else {
+      startDict(false);
+    }
   };
 
   const insertSnippet = (body: string): void => {
@@ -116,15 +202,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     }
   };
 
-  const toggleDictation = (): void => {
-    if (listening) {
-      if (interim) setText((t) => joinText(t, interim));
-      stopDictation();
-    } else {
-      startDict(false);
-    }
-  };
-
   return (
     <div className="composer">
       {busy && (
@@ -141,12 +218,24 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         </div>
       )}
 
-      {voiceMode && (
-        <button className="composer-voicemode" onClick={onToggleVoiceMode}>
-          <span className="vm-dot" />
-          <span>Conversation mode on — replies read aloud. Tap to turn off.</span>
-        </button>
-      )}
+      <button
+        type="button"
+        className={`convo-toggle ${voiceMode ? 'on' : ''}`}
+        onClick={onToggleVoiceMode}
+        disabled={ended}
+      >
+        <span className="convo-main">
+          <span className="convo-title">Conversation mode</span>
+          <span className="convo-sub">
+            {voiceMode
+              ? 'Replies read aloud — just speak to answer'
+              : 'Hands-free: speak, listen, repeat'}
+          </span>
+        </span>
+        <span className={`toggle ${voiceMode ? 'on' : ''}`}>
+          <span className="toggle-knob" />
+        </span>
+      </button>
 
       {images.length > 0 && (
         <div className="composer-attachments">
@@ -165,11 +254,21 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         </div>
       )}
 
-      {listening && (
-        <div className="composer-listening">
+      {pendingSend ? (
+        <div className="composer-pending">
           <span className="mic-dot" />
-          <span>{interim || 'Listening…'}</span>
+          <span>Sending your reply…</span>
+          <button className="pending-cancel" onClick={clearAutoSend}>
+            Keep talking
+          </button>
         </div>
+      ) : (
+        listening && (
+          <div className="composer-listening">
+            <span className="mic-dot" />
+            <span>{interim || 'Listening… speak now'}</span>
+          </div>
+        )
       )}
 
       <div className="composer-row">
@@ -201,14 +300,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           }}
         />
 
-        {dictationSupported() && (
+        {dictationSupported() && !voiceMode && (
           <button
-            className={`composer-icon ${listening ? 'on' : ''}`}
+            type="button"
+            className={`composer-mic ${listening ? 'on' : ''}`}
             onClick={toggleDictation}
             disabled={ended}
-            aria-label={listening ? 'Stop voice input' : 'Voice input'}
+            aria-label={listening ? 'Stop voice input' : 'Start voice input'}
           >
-            🎙
+            <MicIcon />
           </button>
         )}
 
@@ -232,8 +332,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       {addOpen && (
         <AddSheet
           hasDraft={text.trim() !== ''}
-          voiceMode={voiceMode}
-          onToggleVoiceMode={onToggleVoiceMode}
           onPickImage={() => fileRef.current?.click()}
           onInsertSnippet={insertSnippet}
           onSaveDraft={saveDraft}

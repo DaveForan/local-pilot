@@ -3,8 +3,6 @@ import { usePilot } from '../store';
 
 interface Props {
   hasDraft: boolean;
-  voiceMode: boolean;
-  onToggleVoiceMode: () => void;
   onPickImage: () => void;
   onInsertSnippet: (body: string) => void;
   onSaveDraft: () => void;
@@ -18,8 +16,6 @@ interface Props {
  */
 export function AddSheet({
   hasDraft,
-  voiceMode,
-  onToggleVoiceMode,
   onPickImage,
   onInsertSnippet,
   onSaveDraft,
@@ -41,17 +37,6 @@ export function AddSheet({
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-grip" />
         <div className="sheet-head">Add to chat</div>
-
-        <button className="sheet-item sheet-toggle" onClick={onToggleVoiceMode}>
-          <span className="sheet-icon">🔊</span>
-          <span className="sheet-item-text">
-            <span className="sheet-item-title">Conversation mode</span>
-            <span className="sheet-item-sub">Read replies aloud and reopen the mic</span>
-          </span>
-          <span className={`toggle ${voiceMode ? 'on' : ''}`}>
-            <span className="toggle-knob" />
-          </span>
-        </button>
 
         <button
           className="sheet-item"

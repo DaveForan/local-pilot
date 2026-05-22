@@ -987,6 +987,100 @@ textarea {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
+/* always-visible conversation-mode toggle */
+.convo-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  color: var(--text);
+}
+.convo-toggle.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.convo-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.convo-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.convo-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.convo-sub {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.convo-toggle.on .convo-sub {
+  color: var(--accent);
+}
+
+/* the mic button — the obvious voice affordance */
+.composer-mic {
+  flex-shrink: 0;
+  width: 48px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  cursor: pointer;
+}
+.composer-mic:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+.composer-mic:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.composer-mic.on {
+  background: var(--danger);
+  border-color: transparent;
+  color: var(--on-accent);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+/* the cancelable "about to send" strip in conversation mode */
+.composer-pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--accent);
+}
+.pending-cancel {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 7px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .composer-voicemode {
   display: flex;
   align-items: center;

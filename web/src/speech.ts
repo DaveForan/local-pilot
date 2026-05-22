@@ -32,7 +32,9 @@ export interface DictationHandlers {
   onError: (message: string) => void;
 }
 
-/** Start dictation; returns a function that stops it. */
+/** Start dictation; returns a function that stops it. Recognition is kept
+ *  alive across the browser's silence/timeout cutoffs by auto-restarting, so
+ *  long dictation does not quietly drop. */
 export function startDictation(handlers: DictationHandlers): () => void {
   const Ctor = recognitionCtor();
   if (!Ctor) {
@@ -40,10 +42,12 @@ export function startDictation(handlers: DictationHandlers): () => void {
     handlers.onEnd();
     return () => {};
   }
+  let stopped = false;
   const rec = new Ctor();
   rec.continuous = true;
   rec.interimResults = true;
   rec.lang = navigator.language || 'en-US';
+
   rec.onresult = (e: any) => {
     let interim = '';
     let final = '';
@@ -55,15 +59,42 @@ export function startDictation(handlers: DictationHandlers): () => void {
     if (final) handlers.onText(final, true);
     else if (interim) handlers.onText(interim, false);
   };
-  rec.onerror = (e: any) =>
-    handlers.onError(e?.error ? `Voice input error: ${e.error}` : 'Voice input error');
-  rec.onend = () => handlers.onEnd();
+
+  rec.onerror = (e: any) => {
+    const err = String(e?.error ?? '');
+    // no-speech / aborted are routine — onend will restart recognition.
+    if (err === 'no-speech' || err === 'aborted') return;
+    if (err === 'not-allowed' || err === 'service-not-allowed') {
+      stopped = true;
+      handlers.onError('Microphone access was blocked — check the site permission.');
+      return;
+    }
+    handlers.onError(`Voice input error: ${err || 'unknown'}`);
+  };
+
+  rec.onend = () => {
+    if (stopped) {
+      handlers.onEnd();
+      return;
+    }
+    // The browser ends recognition on pauses/timeouts — restart to stay live.
+    window.setTimeout(() => {
+      if (stopped) return;
+      try {
+        rec.start();
+      } catch {
+        /* already running */
+      }
+    }, 150);
+  };
+
   try {
     rec.start();
   } catch {
     /* already running */
   }
   return () => {
+    stopped = true;
     try {
       rec.stop();
     } catch {
