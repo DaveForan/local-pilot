@@ -7,6 +7,7 @@ import type {
   PermissionDecision,
   PermissionMode,
 } from './protocol';
+import { api, type Snippet } from './api';
 
 export interface PilotState {
   connected: boolean;
@@ -15,6 +16,8 @@ export interface PilotState {
   events: Record<string, SessionEvent[]>;
   activeId: string | null;
   error: string | null;
+  /** Saved prompts, loaded once over REST (not the WebSocket). */
+  snippets: Snippet[];
 }
 
 /**
@@ -28,6 +31,7 @@ class PilotStore {
     events: {},
     activeId: null,
     error: null,
+    snippets: [],
   };
 
   private readonly listeners = new Set<() => void>();
@@ -35,10 +39,12 @@ class PilotStore {
   private ws: WebSocket | null = null;
   private reconnectTimer: number | null = null;
   private selectOnHistory = false;
+  private snippetsLoaded = false;
 
   subscribe = (cb: () => void): (() => void) => {
     this.listeners.add(cb);
     this.ensureConnected();
+    this.ensureSnippetsLoaded();
     return () => this.listeners.delete(cb);
   };
 
@@ -193,6 +199,44 @@ class PilotStore {
   clearError(): void {
     this.patch({ error: null });
   }
+
+  // --- snippets (saved prompts, REST-backed) --------------------------------
+
+  private ensureSnippetsLoaded(): void {
+    if (this.snippetsLoaded) return;
+    this.snippetsLoaded = true;
+    void this.reloadSnippets();
+  }
+
+  async reloadSnippets(): Promise<void> {
+    try {
+      this.patch({ snippets: await api.snippets() });
+    } catch {
+      this.snippetsLoaded = false; // allow a later retry
+    }
+  }
+
+  async createSnippet(title: string, body: string): Promise<void> {
+    try {
+      const snippet = await api.addSnippet(title, body);
+      this.patch({ snippets: [...this.state.snippets, snippet] });
+    } catch (err) {
+      this.patch({ error: `Could not save snippet: ${errText(err)}` });
+    }
+  }
+
+  async deleteSnippet(id: string): Promise<void> {
+    try {
+      await api.deleteSnippet(id);
+      this.patch({ snippets: this.state.snippets.filter((s) => s.id !== id) });
+    } catch (err) {
+      this.patch({ error: `Could not delete snippet: ${errText(err)}` });
+    }
+  }
+}
+
+function errText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 function sortSessions(list: SessionMeta[]): SessionMeta[] {
