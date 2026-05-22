@@ -987,6 +987,64 @@ textarea {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
+.composer-voicemode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+}
+.vm-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+/* on/off switch — used in the add-to-chat sheet */
+.sheet-toggle {
+  margin-bottom: 8px;
+}
+.toggle {
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  position: relative;
+  transition: background 0.15s;
+}
+.toggle.on {
+  background: var(--accent);
+  border-color: transparent;
+}
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text-3);
+  transition: transform 0.15s, background 0.15s;
+}
+.toggle.on .toggle-knob {
+  background: var(--on-accent);
+  transform: translateX(18px);
+}
+
 /* ===== add-to-chat sheet ================================================= */
 
 .sheet-backdrop {

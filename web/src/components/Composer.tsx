@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import type { SessionMeta } from '../protocol';
 import { store } from '../store';
 import { prepareImage, type PreparedImage } from '../image';
@@ -6,12 +6,26 @@ import { startDictation, dictationSupported } from '../speech';
 import { AddSheet } from './AddSheet';
 import { SnippetManager } from './SnippetManager';
 
+/** Imperative handle so conversation mode can reopen the mic after a reply. */
+export interface ComposerHandle {
+  beginVoiceReply: () => void;
+}
+
+interface Props {
+  session: SessionMeta;
+  voiceMode: boolean;
+  onToggleVoiceMode: () => void;
+}
+
 /** Append `b` to `a` with a single separating space. */
 function joinText(a: string, b: string): string {
   return a.trim() ? `${a.replace(/\s+$/, '')} ${b}` : b;
 }
 
-export function Composer({ session }: { session: SessionMeta }) {
+export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
+  { session, voiceMode, onToggleVoiceMode },
+  ref,
+) {
   const [text, setText] = useState('');
   const [interim, setInterim] = useState('');
   const [images, setImages] = useState<PreparedImage[]>([]);
@@ -31,6 +45,37 @@ export function Composer({ session }: { session: SessionMeta }) {
     setListening(false);
     setInterim('');
   };
+
+  /** Start dictation. `quiet` suppresses error alerts (used by the auto loop). */
+  const startDict = (quiet: boolean): void => {
+    setListening(true);
+    stopDictationRef.current = startDictation({
+      onText: (t, isFinal) => {
+        if (isFinal) {
+          setText((cur) => joinText(cur, t));
+          setInterim('');
+        } else {
+          setInterim(t);
+        }
+      },
+      onEnd: () => {
+        stopDictationRef.current = null;
+        setListening(false);
+        setInterim('');
+      },
+      onError: (msg) => {
+        setListening(false);
+        if (!quiet) window.alert(msg);
+      },
+    });
+  };
+
+  // Conversation mode reopens the mic once Claude has finished speaking.
+  useImperativeHandle(ref, () => ({
+    beginVoiceReply: () => {
+      if (!listening && !busy && !ended && dictationSupported()) startDict(true);
+    },
+  }));
 
   const submit = (): void => {
     if (!canSend) return;
@@ -75,25 +120,9 @@ export function Composer({ session }: { session: SessionMeta }) {
     if (listening) {
       if (interim) setText((t) => joinText(t, interim));
       stopDictation();
-      return;
+    } else {
+      startDict(false);
     }
-    setListening(true);
-    stopDictationRef.current = startDictation({
-      onText: (t, isFinal) => {
-        if (isFinal) {
-          setText((cur) => joinText(cur, t));
-          setInterim('');
-        } else {
-          setInterim(t);
-        }
-      },
-      onEnd: () => {
-        stopDictationRef.current = null;
-        setListening(false);
-        setInterim('');
-      },
-      onError: (msg) => window.alert(msg),
-    });
   };
 
   return (
@@ -110,6 +139,13 @@ export function Composer({ session }: { session: SessionMeta }) {
             Stop
           </button>
         </div>
+      )}
+
+      {voiceMode && (
+        <button className="composer-voicemode" onClick={onToggleVoiceMode}>
+          <span className="vm-dot" />
+          <span>Conversation mode on — replies read aloud. Tap to turn off.</span>
+        </button>
       )}
 
       {images.length > 0 && (
@@ -196,6 +232,8 @@ export function Composer({ session }: { session: SessionMeta }) {
       {addOpen && (
         <AddSheet
           hasDraft={text.trim() !== ''}
+          voiceMode={voiceMode}
+          onToggleVoiceMode={onToggleVoiceMode}
           onPickImage={() => fileRef.current?.click()}
           onInsertSnippet={insertSnippet}
           onSaveDraft={saveDraft}
@@ -206,4 +244,4 @@ export function Composer({ session }: { session: SessionMeta }) {
       {managerOpen && <SnippetManager onClose={() => setManagerOpen(false)} />}
     </div>
   );
-}
+});

@@ -77,11 +77,16 @@ interface Props {
   sessionId: string;
   events: SessionEvent[];
   status: SessionStatus;
+  /** When on, new replies are read aloud automatically. */
+  voiceMode: boolean;
+  /** Called once a reply has finished being read aloud. */
+  onReplySpoken: () => void;
 }
 
-export function Timeline({ sessionId, events, status }: Props) {
+export function Timeline({ sessionId, events, status, voiceMode, onReplySpoken }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
   const [logKey, setLogKey] = useState<number | null>(null);
+  const spokenRef = useRef<number>(-1);
   const turns = useMemo(() => groupTurns(events), [events]);
   // Look the open turn up by key each render so the log keeps updating live.
   const logTurn = logKey == null ? null : turns.find((t) => t.key === logKey) ?? null;
@@ -89,6 +94,27 @@ export function Timeline({ sessionId, events, status }: Props) {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [events.length, status]);
+
+  // Conversation mode: read each newly-completed reply aloud.
+  useEffect(() => {
+    if (!voiceMode) {
+      spokenRef.current = -1;
+      return;
+    }
+    const last = turns[turns.length - 1];
+    if (!last?.result) return;
+    const text = last.texts.join('\n\n').trim();
+    if (!text) return;
+    if (spokenRef.current === -1) {
+      // Just switched on — arm without re-reading the reply already shown.
+      spokenRef.current = last.key;
+      return;
+    }
+    if (last.key > spokenRef.current) {
+      spokenRef.current = last.key;
+      speak(text, onReplySpoken);
+    }
+  }, [turns, voiceMode, onReplySpoken]);
 
   return (
     <div className="timeline">
