@@ -8,6 +8,7 @@ export function NewSessionDialog({ onClose }: { onClose: () => void }) {
   const [listing, setListing] = useState<DirListing | null>(null);
   const [title, setTitle] = useState('');
   const [mode, setMode] = useState<PermissionMode>('default');
+  const [model, setModel] = useState('default');
   const [err, setErr] = useState<string | null>(null);
 
   const browse = (path?: string): void => {
@@ -28,6 +29,8 @@ export function NewSessionDialog({ onClose }: { onClose: () => void }) {
       cwd: listing.path,
       title: title.trim() || undefined,
       permissionMode: mode,
+      // 'default' means: don't pin a model — use the Claude Code default.
+      model: model === 'default' ? null : model,
     });
     onClose();
   };
@@ -44,6 +47,16 @@ export function NewSessionDialog({ onClose }: { onClose: () => void }) {
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. orbweaver bugfix"
           />
+        </label>
+
+        <label className="field">
+          <span>Model</span>
+          <select value={model} onChange={(e) => setModel(e.target.value)}>
+            <option value="default">Default — your Claude Code setting</option>
+            <option value="opus">Claude Opus — most capable</option>
+            <option value="sonnet">Claude Sonnet — balanced</option>
+            <option value="haiku">Claude Haiku — fastest</option>
+          </select>
         </label>
 
         <label className="field">

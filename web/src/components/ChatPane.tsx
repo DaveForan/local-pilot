@@ -41,7 +41,8 @@ export function ChatPane({ session }: { session: SessionMeta | null }) {
           <div className="chat-head-text">
             <div className="chat-title">{session.title}</div>
             <div className="chat-sub">
-              {st.label} · {shortPath(session.cwd, 52)}
+              {st.label}
+              {session.model ? ` · ${session.model}` : ''} · {shortPath(session.cwd, 52)}
             </div>
           </div>
         </div>
