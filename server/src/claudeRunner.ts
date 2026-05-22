@@ -54,6 +54,8 @@ export interface RunnerOptions {
   permissionMode: PermissionMode;
   /** Claude Code session id to resume (after a server restart); null for fresh. */
   resumeSessionId: string | null;
+  /** MCP servers local-pilot layers onto this session (may be empty). */
+  mcpServers: Record<string, unknown>;
   onEvent: (event: RunnerEvent) => void;
   onError: (err: unknown) => void;
   onEnd: () => void;
@@ -143,6 +145,9 @@ export class ClaudeRunner {
     };
     if (this.opts.model) options.model = this.opts.model;
     if (this.opts.resumeSessionId) options.resume = this.opts.resumeSessionId;
+    if (Object.keys(this.opts.mcpServers).length > 0) {
+      options.mcpServers = this.opts.mcpServers;
+    }
 
     try {
       this.generator = runQuery({ prompt: this.queue, options });

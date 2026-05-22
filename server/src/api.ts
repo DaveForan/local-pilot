@@ -4,6 +4,8 @@ import os from 'node:os';
 import express from 'express';
 import { listSnippets, addSnippet, deleteSnippet } from './snippets';
 import { readSettings, writeSettings, listSkills } from './claudeConfig';
+import { readMcpServers, writeMcpServers } from './mcpConfig';
+import type { McpServers } from './mcpConfig';
 
 /** REST endpoints for everything that is not the live session stream. */
 export function createApiRouter() {
@@ -48,6 +50,20 @@ export function createApiRouter() {
 
   router.get('/claude/skills', async (_req, res) => {
     res.json(await listSkills());
+  });
+
+  // --- MCP servers (local-pilot's own layer) -------------------------------
+  router.get('/mcp', async (_req, res) => {
+    res.json(await readMcpServers());
+  });
+
+  router.put('/mcp', async (req, res) => {
+    try {
+      await writeMcpServers((req.body ?? {}) as McpServers);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
   });
 
   // --- directory browser (for picking a session working directory) ---------

@@ -3,11 +3,13 @@ import { usePilot, store } from './store';
 import { Sidebar } from './components/Sidebar';
 import { ChatPane } from './components/ChatPane';
 import { NewSessionDialog } from './components/NewSessionDialog';
+import { SettingsDialog } from './components/SettingsDialog';
 
 export function App() {
   const { sessions, activeId, connected, error } = usePilot();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const active = sessions.find((s) => s.id === activeId) ?? null;
 
   return (
@@ -29,6 +31,13 @@ export function App() {
           <span className="conn-dot" />
           {connected ? 'connected' : 'reconnecting…'}
         </div>
+        <button
+          className="icon-btn"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Open settings"
+        >
+          ⚙
+        </button>
       </header>
 
       <div className="body">
@@ -61,6 +70,7 @@ export function App() {
       )}
 
       {newOpen && <NewSessionDialog onClose={() => setNewOpen(false)} />}
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

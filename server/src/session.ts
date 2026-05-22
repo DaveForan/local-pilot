@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 import { ClaudeRunner } from './claudeRunner';
 import type { RunnerEvent, PermissionOutcome } from './claudeRunner';
+import { readMcpServersSync } from './mcpConfig';
 import type { PersistedSession } from './store';
 import type {
   SessionMeta,
@@ -119,6 +120,8 @@ export class Session {
       model: this.meta.model,
       permissionMode: this.meta.permissionMode,
       resumeSessionId: this.meta.claudeSessionId,
+      // Read fresh each time a runner starts so MCP edits apply to new runs.
+      mcpServers: readMcpServersSync(),
       onEvent: (event) => this.handleRunnerEvent(event),
       onError: (err) => {
         this.add({ kind: 'system', text: `Error: ${errMessage(err)}` });

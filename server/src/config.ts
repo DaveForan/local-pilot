@@ -10,6 +10,9 @@ export const paths = {
   data: DATA_DIR,
   sessions: path.join(DATA_DIR, 'sessions'),
   snippets: path.join(DATA_DIR, 'snippets.json'),
+  // MCP servers local-pilot layers onto every session — kept in our own data
+  // dir so we never have to rewrite the user's ~/.claude.json.
+  mcp: path.join(DATA_DIR, 'mcp.json'),
   claudeDir: path.join(os.homedir(), '.claude'),
   claudeSettings: path.join(os.homedir(), '.claude', 'settings.json'),
   // The server runs from server/, so the built UI sits one level up.

@@ -29,6 +29,24 @@ export interface DirListing {
   dirs: { name: string; path: string }[];
 }
 
+/** An MCP server launched locally over stdio. */
+export interface McpStdioServer {
+  type?: 'stdio';
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+/** A remote MCP server reached over HTTP or SSE. */
+export interface McpRemoteServer {
+  type: 'http' | 'sse';
+  url: string;
+  headers?: Record<string, string>;
+}
+
+export type McpServer = McpStdioServer | McpRemoteServer;
+export type McpServers = Record<string, McpServer>;
+
 export const api = {
   snippets: () => req<Snippet[]>('GET', '/snippets'),
   addSnippet: (title: string, body: string) => req<Snippet>('POST', '/snippets', { title, body }),
@@ -36,6 +54,8 @@ export const api = {
   skills: () => req<SkillInfo[]>('GET', '/claude/skills'),
   settings: () => req<Record<string, unknown>>('GET', '/claude/settings'),
   saveSettings: (s: Record<string, unknown>) => req<{ ok: true }>('PUT', '/claude/settings', s),
+  mcp: () => req<McpServers>('GET', '/mcp'),
+  saveMcp: (servers: McpServers) => req<{ ok: true }>('PUT', '/mcp', servers),
   fsList: (path?: string) =>
     req<DirListing>('GET', `/fs/list${path ? `?path=${encodeURIComponent(path)}` : ''}`),
 };
