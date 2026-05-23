@@ -22,12 +22,13 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 }
 
 /** Upload an audio clip for server-side Whisper transcription. */
-async function transcribeAudio(audio: Blob): Promise<string> {
+async function transcribeAudio(audio: Blob, signal?: AbortSignal): Promise<string> {
   const res = await fetch('/api/transcribe', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': audio.type || 'audio/webm' },
     body: audio,
+    signal,
   });
   if (!res.ok) {
     let message = `transcribe → ${res.status}`;

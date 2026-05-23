@@ -22,8 +22,30 @@ function plainText(md: string): string {
     .trim();
 }
 
-// Check Piper availability once; subsequent speak() calls use the cached
-// answer instantly.
+// --- speaking-state subscription -------------------------------------------
+// UI components subscribe to know when to show a "Reading…" indicator + a
+// Stop button, without polling.
+
+type SpeakingListener = (speaking: boolean) => void;
+const listeners = new Set<SpeakingListener>();
+let speakingState = false;
+
+export function subscribeSpeaking(fn: SpeakingListener): () => void {
+  listeners.add(fn);
+  fn(speakingState);
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
+function setSpeakingState(s: boolean): void {
+  if (speakingState === s) return;
+  speakingState = s;
+  for (const l of listeners) l(s);
+}
+
+// --- Piper availability (cached after first check) -------------------------
+
 let piperPromise: Promise<boolean> | null = null;
 function piperAvailable(): Promise<boolean> {
   if (piperPromise === null) {
@@ -35,77 +57,25 @@ function piperAvailable(): Promise<boolean> {
   return piperPromise;
 }
 
+// --- TTS state shared by Piper + browser fallback --------------------------
+
+const TTS_FETCH_TIMEOUT_MS = 15000;
+
 let currentAudio: HTMLAudioElement | null = null;
 let currentAbort: AbortController | null = null;
 let currentObjectUrl: string | null = null;
+let currentTimeout: number | null = null;
 
-function speakViaBrowser(text: string, onEnd?: () => void): void {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-    onEnd?.();
-    return;
-  }
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = navigator.language || 'en-US';
-  if (onEnd) {
-    utterance.onend = onEnd;
-    utterance.onerror = onEnd;
-  }
-  window.speechSynthesis.speak(utterance);
-}
-
-async function speakViaPiper(text: string, onEnd?: () => void): Promise<void> {
-  stopSpeaking(); // cancel anything currently speaking
-  const abort = new AbortController();
-  currentAbort = abort;
-  try {
-    const res = await fetch('/api/tts', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-      signal: abort.signal,
-    });
-    if (abort.signal.aborted) return;
-    if (!res.ok) throw new Error(`tts ${res.status}`);
-    const blob = await res.blob();
-    if (abort.signal.aborted) return;
-    const url = URL.createObjectURL(blob);
-    currentObjectUrl = url;
-    const audio = new Audio(url);
-    currentAudio = audio;
-    const done = (): void => {
-      if (currentObjectUrl === url) {
-        URL.revokeObjectURL(url);
-        currentObjectUrl = null;
-      }
-      if (currentAudio === audio) currentAudio = null;
-      if (currentAbort === abort) currentAbort = null;
-      onEnd?.();
-    };
-    audio.onended = done;
-    audio.onerror = done;
-    await audio.play().catch(done);
-  } catch {
-    if (currentAbort === abort) currentAbort = null;
-    // If the user explicitly stopped, stay silent. Otherwise fall back so the
-    // reply is still spoken — better robotic than mute.
-    if (!abort.signal.aborted) speakViaBrowser(text, onEnd);
-    else onEnd?.();
-  }
-}
-
-export function speak(text: string, onEnd?: () => void): void {
-  const cleaned = plainText(text);
-  void (async () => {
-    if (await piperAvailable()) await speakViaPiper(cleaned, onEnd);
-    else speakViaBrowser(cleaned, onEnd);
-  })();
-}
-
+/** Tear down whatever is currently speaking, silently — does NOT fire any
+ *  pending onEnd callback. Callers that need the conversation loop to
+ *  continue (e.g. the Stop button) trigger that themselves. */
 export function stopSpeaking(): void {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
+  }
+  if (currentTimeout !== null) {
+    window.clearTimeout(currentTimeout);
+    currentTimeout = null;
   }
   if (currentAbort) {
     try {
@@ -131,4 +101,109 @@ export function stopSpeaking(): void {
     }
     currentObjectUrl = null;
   }
+  setSpeakingState(false);
+}
+
+function speakViaBrowser(text: string, onEnd?: () => void): void {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    setSpeakingState(false);
+    onEnd?.();
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = navigator.language || 'en-US';
+  setSpeakingState(true);
+  const finish = (): void => {
+    setSpeakingState(false);
+    onEnd?.();
+  };
+  utterance.onend = finish;
+  utterance.onerror = finish;
+  window.speechSynthesis.speak(utterance);
+}
+
+async function speakViaPiper(text: string, onEnd?: () => void): Promise<void> {
+  setSpeakingState(true);
+  const abort = new AbortController();
+  currentAbort = abort;
+  // Hard ceiling so a stalled fetch can never freeze the conversation loop.
+  currentTimeout = window.setTimeout(() => abort.abort(), TTS_FETCH_TIMEOUT_MS);
+
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+      signal: abort.signal,
+    });
+    if (currentTimeout !== null) {
+      window.clearTimeout(currentTimeout);
+      currentTimeout = null;
+    }
+    if (abort.signal.aborted) return; // stopped on purpose — stay silent
+    if (!res.ok) throw new Error(`tts ${res.status}`);
+    const blob = await res.blob();
+    if (abort.signal.aborted) return;
+
+    const url = URL.createObjectURL(blob);
+    currentObjectUrl = url;
+    const audio = new Audio(url);
+    currentAudio = audio;
+
+    const done = (): void => {
+      if (currentObjectUrl === url) {
+        URL.revokeObjectURL(url);
+        currentObjectUrl = null;
+      }
+      if (currentAudio === audio) currentAudio = null;
+      if (currentAbort === abort) currentAbort = null;
+      setSpeakingState(false);
+      onEnd?.();
+    };
+    audio.onended = done;
+    audio.onerror = done;
+
+    try {
+      await audio.play();
+    } catch {
+      // Playback rejected (autoplay restriction, decoding error, …). Don't
+      // leave the reply silent — clean this up and fall back to browser TTS.
+      if (currentObjectUrl === url) {
+        URL.revokeObjectURL(url);
+        currentObjectUrl = null;
+      }
+      if (currentAudio === audio) currentAudio = null;
+      if (currentAbort === abort) currentAbort = null;
+      speakViaBrowser(text, onEnd);
+    }
+  } catch {
+    if (currentAbort === abort) currentAbort = null;
+    if (currentTimeout !== null) {
+      window.clearTimeout(currentTimeout);
+      currentTimeout = null;
+    }
+    if (abort.signal.aborted) {
+      // Intentional stop (user, timeout, or replacement) — stay silent.
+      setSpeakingState(false);
+      return;
+    }
+    // Network / server error: fall back so the reply isn't silent.
+    speakViaBrowser(text, onEnd);
+  }
+}
+
+/** Read text aloud. `onEnd` fires once the audio finishes naturally; it does
+ *  NOT fire if the speech was stopped via `stopSpeaking()`. */
+export function speak(text: string, onEnd?: () => void): void {
+  // Silence whatever is playing right away so two speak() calls in a row
+  // can't double up. The replaced call's onEnd is intentionally dropped —
+  // the new call's onEnd carries the loop forward.
+  stopSpeaking();
+  const cleaned = plainText(text);
+  void (async () => {
+    if (await piperAvailable()) await speakViaPiper(cleaned, onEnd);
+    else speakViaBrowser(cleaned, onEnd);
+  })();
 }

@@ -4,7 +4,7 @@ import { store } from '../store';
 import { api } from '../api';
 import { prepareImage, type PreparedImage } from '../image';
 import { recordUtterance, recordingSupported } from '../audio';
-import { stopSpeaking } from '../speech';
+import { stopSpeaking, subscribeSpeaking } from '../speech';
 import { AddSheet } from './AddSheet';
 import { SnippetManager } from './SnippetManager';
 
@@ -21,6 +21,12 @@ interface Props {
 
 /** Cancelable window after a transcript lands, before it is auto-sent. */
 const GRACE_MS = 2200;
+/** Hard ceiling on a transcribe request. */
+const TRANSCRIBE_TIMEOUT_MS = 30000;
+/** Consecutive transcribe failures before we stop auto-retrying. */
+const TRANSCRIBE_MAX_FAILS = 3;
+/** Idle time in conversation mode before the watchdog re-opens the mic. */
+const WATCHDOG_MS = 3000;
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   { session, voiceMode, onToggleVoiceMode },
@@ -33,9 +39,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [listening, setListening] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [pendingSend, setPendingSend] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const recordCancel = useRef<(() => void) | null>(null);
+  const transcribeAbort = useRef<AbortController | null>(null);
+  const transcribeFails = useRef(0);
   const graceTimer = useRef<number | null>(null);
   const submitRef = useRef<() => void>(() => {});
   // Indirection so the recorder's callbacks always run the latest logic.
@@ -52,6 +61,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const stopVoice = (): void => {
     recordCancel.current?.();
     recordCancel.current = null;
+    if (transcribeAbort.current) {
+      try {
+        transcribeAbort.current.abort();
+      } catch {
+        /* ignore */
+      }
+      transcribeAbort.current = null;
+    }
     if (graceTimer.current !== null) {
       window.clearTimeout(graceTimer.current);
       graceTimer.current = null;
@@ -95,10 +112,16 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     recordCancel.current = null;
     setListening(false);
     setTranscribing(true);
+    const abort = new AbortController();
+    transcribeAbort.current = abort;
+    const timer = window.setTimeout(() => abort.abort(), TRANSCRIBE_TIMEOUT_MS);
     api
-      .transcribe(audio)
+      .transcribe(audio, abort.signal)
       .then((raw) => {
+        if (transcribeAbort.current === abort) transcribeAbort.current = null;
+        window.clearTimeout(timer);
         setTranscribing(false);
+        transcribeFails.current = 0;
         const spoken = raw.trim();
         if (!spoken) {
           beginUtterance(); // nothing recognised — keep listening
@@ -113,9 +136,22 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         }, GRACE_MS);
       })
       .catch((e) => {
+        if (transcribeAbort.current === abort) transcribeAbort.current = null;
+        window.clearTimeout(timer);
         setTranscribing(false);
-        if (/not installed/i.test((e as Error).message ?? '')) {
+        if (abort.signal.aborted) return; // intentional stop — don't retry
+        const msg = (e as Error).message ?? '';
+        if (/not installed/i.test(msg)) {
           window.alert('Voice transcription is not installed on the server.');
+          return;
+        }
+        transcribeFails.current += 1;
+        if (transcribeFails.current >= TRANSCRIBE_MAX_FAILS) {
+          window.alert(
+            `Voice transcription failed ${TRANSCRIBE_MAX_FAILS} times in a row — ` +
+              'check the server and toggle Conversation mode to retry.',
+          );
+          transcribeFails.current = 0;
           return;
         }
         beginUtterance(); // transient failure — keep listening
@@ -169,11 +205,34 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceMode]);
 
-  // Tidy up the recorder and timers if the component goes away.
+  // Mirror the global TTS speaking state so we can show the Reading strip.
+  useEffect(() => subscribeSpeaking(setSpeaking), []);
+
+  // Watchdog: in conversation mode, if everything is idle for a beat and
+  // nothing's happening, the loop must have dropped — restart it.
+  useEffect(() => {
+    if (!voiceMode || ended || !recordingSupported()) return;
+    const idle =
+      !busy && !listening && !transcribing && !pendingSend && !speaking && !recordCancel.current;
+    if (!idle) return;
+    const t = window.setTimeout(() => beginUtterance(), WATCHDOG_MS);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceMode, busy, ended, listening, transcribing, pendingSend, speaking]);
+
+  // Tidy up the recorder, timers and any in-flight TTS if the component goes away.
   useEffect(() => {
     return () => {
       recordCancel.current?.();
       if (graceTimer.current !== null) window.clearTimeout(graceTimer.current);
+      if (transcribeAbort.current) {
+        try {
+          transcribeAbort.current.abort();
+        } catch {
+          /* ignore */
+        }
+      }
+      stopSpeaking();
     };
   }, []);
 
@@ -277,6 +336,20 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         <div className="composer-listening">
           <span className="spinner" />
           <span>Transcribing…</span>
+        </div>
+      ) : speaking ? (
+        <div className="composer-reading">
+          <span className="reading-dot" />
+          <span>Reading reply…</span>
+          <button
+            className="pending-cancel"
+            onClick={() => {
+              stopSpeaking();
+              if (voiceMode) beginUtterance();
+            }}
+          >
+            Stop
+          </button>
         </div>
       ) : (
         listening && (
