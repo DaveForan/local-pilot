@@ -227,6 +227,94 @@ export function createApiRouter(manager: SessionManager) {
     }
   });
 
+  // --- data export / import ------------------------------------------------
+  // Tarball of the portable parts of ~/.local-pilot: sessions/, snippets,
+  // mcp/hooks/plugins configs. Excludes machine-local stuff (token,
+  // whisper/, piper/, vapid, push subscriptions, auth-sessions).
+  const DATA_INCLUDES = [
+    'sessions',
+    'snippets.json',
+    'mcp.json',
+    'hooks.json',
+    'plugins.json',
+  ];
+
+  router.get('/data/export', async (_req, res) => {
+    const { spawn } = await import('node:child_process');
+    // Filter to what actually exists so tar doesn't error on missing entries.
+    const args = ['-czf', '-', '-C', paths.data];
+    for (const name of DATA_INCLUDES) {
+      try {
+        await fs.access(path.join(paths.data, name));
+        args.push(name);
+      } catch {
+        /* skip — not present */
+      }
+    }
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="local-pilot-${new Date().toISOString().slice(0, 10)}.tar.gz"`,
+    );
+    const child = spawn('tar', args);
+    child.stdout.pipe(res);
+    let err = '';
+    child.stderr.on('data', (b: Buffer) => (err += b.toString()));
+    child.on('close', (code) => {
+      if (code !== 0 && !res.headersSent) {
+        res.status(500).end(err || 'tar failed');
+      } else if (code !== 0) {
+        console.warn('[export] tar exited', code, err);
+      }
+    });
+  });
+
+  router.post('/data/import', express.raw({ type: '*/*', limit: '500mb' }), async (req, res) => {
+    const body = req.body as Buffer | undefined;
+    if (!body || body.length === 0) {
+      res.status(400).json({ error: 'empty body' });
+      return;
+    }
+    const { spawn } = await import('node:child_process');
+    const tmpFile = path.join(os.tmpdir(), `lp-import-${Date.now()}.tar.gz`);
+    await fs.writeFile(tmpFile, body);
+    try {
+      // Validate first — refuse to extract a corrupt archive.
+      await new Promise<void>((resolve, reject) => {
+        const probe = spawn('tar', ['-tzf', tmpFile]);
+        let err = '';
+        probe.stderr.on('data', (b: Buffer) => (err += b.toString()));
+        probe.on('close', (code) =>
+          code === 0 ? resolve() : reject(new Error(err || 'invalid archive')),
+        );
+      });
+      // Extract into the data dir. -p preserves modes; we deliberately let
+      // it overwrite existing files — that's the point of restore.
+      await new Promise<void>((resolve, reject) => {
+        const extract = spawn('tar', ['-xzpf', tmpFile, '-C', paths.data]);
+        let err = '';
+        extract.stderr.on('data', (b: Buffer) => (err += b.toString()));
+        extract.on('close', (code) =>
+          code === 0 ? resolve() : reject(new Error(err || 'extract failed')),
+        );
+      });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    } finally {
+      await fs.unlink(tmpFile).catch(() => undefined);
+    }
+  });
+
+  router.post('/data/reload', async (_req, res) => {
+    try {
+      await manager.reload();
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
   // --- token rotation ------------------------------------------------------
   // Issues a new access token and invalidates every other session cookie.
   // The new token is returned ONCE in the body for the user to copy.

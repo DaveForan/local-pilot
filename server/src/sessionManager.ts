@@ -134,6 +134,16 @@ export class SessionManager {
     for (const session of this.sessions.values()) session.dispose();
   }
 
+  /** Tear down every in-memory session and re-load from disk. Used after a
+   *  data-import to pick up the restored ~/.local-pilot/sessions/ files. */
+  async reload(): Promise<void> {
+    for (const session of this.sessions.values()) session.dispose();
+    this.sessions.clear();
+    await this.init();
+    // Tell every connected client to refresh its session list.
+    this.broadcaster?.toAll({ t: 'sessions', sessions: this.list() });
+  }
+
   private require(id: string): Session {
     const session = this.sessions.get(id);
     if (!session) throw new Error(`Unknown session: ${id}`);

@@ -117,6 +117,27 @@ export const api = {
   savePlugins: (plugins: Array<{ type: 'local'; path: string }>) =>
     req<{ ok: true }>('PUT', '/plugins', plugins),
   rotateToken: () => req<{ ok: true; token: string }>('POST', '/auth/rotate-token'),
+  /** URL the browser hits directly to download the export tarball. */
+  exportDataUrl: () => '/api/data/export',
+  importData: async (blob: Blob): Promise<void> => {
+    const res = await fetch('/api/data/import', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/gzip' },
+      body: blob,
+    });
+    if (!res.ok) {
+      let message = `import → ${res.status}`;
+      try {
+        const data = (await res.json()) as { error?: string };
+        if (data?.error) message = data.error;
+      } catch {
+        /* no JSON */
+      }
+      throw new Error(message);
+    }
+  },
+  reloadData: () => req<{ ok: true }>('POST', '/data/reload'),
   pushVapid: () => req<{ publicKey: string }>('GET', '/push/vapid'),
   pushSubscribe: (sub: unknown) => req<{ ok: true }>('POST', '/push/subscribe', sub),
   pushUnsubscribe: (endpoint: string) =>
