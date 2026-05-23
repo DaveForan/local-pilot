@@ -209,13 +209,24 @@ export class Session {
         this.add({ kind: 'system', text: event.text });
         break;
       case 'result':
-        this.add({
-          kind: 'result',
-          isError: event.isError,
-          durationMs: event.durationMs,
-          costUsd: event.costUsd,
-          text: event.text,
-        });
+        this.add(
+          event.tokens
+            ? {
+                kind: 'result',
+                isError: event.isError,
+                durationMs: event.durationMs,
+                costUsd: event.costUsd,
+                tokens: event.tokens,
+                text: event.text,
+              }
+            : {
+                kind: 'result',
+                isError: event.isError,
+                durationMs: event.durationMs,
+                costUsd: event.costUsd,
+                text: event.text,
+              },
+        );
         this.setStatus(event.isError ? 'error' : 'idle');
         break;
     }

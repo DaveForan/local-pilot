@@ -34,19 +34,45 @@ interface Totals {
   durationMs: number;
   costUsd: number;
   turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreateTokens: number;
+  haveTokens: boolean;
 }
 
 function totalsFromEvents(events: SessionEvent[]): Totals {
   let durationMs = 0;
   let costUsd = 0;
   let turns = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let cacheCreateTokens = 0;
+  let haveTokens = false;
   for (const e of events) {
     if (e.kind !== 'result') continue;
     turns += 1;
     if (typeof e.durationMs === 'number') durationMs += e.durationMs;
     if (typeof e.costUsd === 'number') costUsd += e.costUsd;
+    if (e.tokens) {
+      haveTokens = true;
+      inputTokens += e.tokens.input;
+      outputTokens += e.tokens.output;
+      cacheReadTokens += e.tokens.cacheRead;
+      cacheCreateTokens += e.tokens.cacheCreate;
+    }
   }
-  return { durationMs, costUsd, turns };
+  return {
+    durationMs,
+    costUsd,
+    turns,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreateTokens,
+    haveTokens,
+  };
 }
 
 function fmtDuration(ms: number): string {
@@ -56,6 +82,12 @@ function fmtDuration(ms: number): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}m ${s}s`;
+}
+
+function fmtCount(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
+  return `${(n / 1_000_000).toFixed(2)}M`;
 }
 
 export function Drawer({
@@ -212,10 +244,31 @@ export function Drawer({
                     <span>Total time</span>
                     <span className="cs-mono">{fmtDuration(totals.durationMs)}</span>
                   </div>
-                  <div className="cs-row">
-                    <span>Total cost</span>
+                  <div className="cs-row" title="What this usage would cost at API rates. Pro / Max subscribers are not actually billed this — the subscription covers it.">
+                    <span>Cost (API equiv.)</span>
                     <span className="cs-mono">${totals.costUsd.toFixed(4)}</span>
                   </div>
+                  {totals.haveTokens && (
+                    <>
+                      <div className="cs-row">
+                        <span>Input tokens</span>
+                        <span className="cs-mono">{fmtCount(totals.inputTokens)}</span>
+                      </div>
+                      <div className="cs-row">
+                        <span>Output tokens</span>
+                        <span className="cs-mono">{fmtCount(totals.outputTokens)}</span>
+                      </div>
+                      <div
+                        className="cs-row"
+                        title="Cache reads are ~10% of the normal input price; cache writes ~125%."
+                      >
+                        <span>Cache (read / write)</span>
+                        <span className="cs-mono">
+                          {fmtCount(totals.cacheReadTokens)} / {fmtCount(totals.cacheCreateTokens)}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
               <label className="cs-field">

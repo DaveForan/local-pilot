@@ -228,6 +228,7 @@ function TurnView({
             currentTool={running ? latestToolName(turn.activity) : null}
             durationMs={turn.result?.durationMs ?? null}
             costUsd={turn.result?.costUsd ?? null}
+            tokens={turn.result?.tokens ?? null}
             openable={turn.activity.length > 0}
             onOpen={onOpenLog}
           />
@@ -292,6 +293,12 @@ function SpeakButton({ text }: { text: string }) {
   );
 }
 
+function fmtTokens(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
+  return `${(n / 1_000_000).toFixed(2)}M`;
+}
+
 /** The single block that stands in for the CLI's streaming command output. */
 function ActivityBlock({
   running,
@@ -299,6 +306,7 @@ function ActivityBlock({
   currentTool,
   durationMs,
   costUsd,
+  tokens,
   openable,
   onOpen,
 }: {
@@ -307,6 +315,7 @@ function ActivityBlock({
   currentTool: string | null;
   durationMs: number | null;
   costUsd: number | null;
+  tokens: { input: number; output: number; cacheRead: number; cacheCreate: number } | null;
   openable: boolean;
   onOpen: () => void;
 }) {
@@ -332,7 +341,23 @@ function ActivityBlock({
       {!running && durationMs != null && (
         <span className="chip">{(durationMs / 1000).toFixed(1)}s</span>
       )}
-      {!running && costUsd != null && <span className="chip">${costUsd.toFixed(4)}</span>}
+      {!running && tokens && (
+        <span
+          className="chip"
+          title={`Input ${tokens.input.toLocaleString()} · Output ${tokens.output.toLocaleString()} · Cache read ${tokens.cacheRead.toLocaleString()} · Cache write ${tokens.cacheCreate.toLocaleString()}`}
+        >
+          ↑{fmtTokens(tokens.input + tokens.cacheRead + tokens.cacheCreate)} ↓
+          {fmtTokens(tokens.output)}
+        </span>
+      )}
+      {!running && costUsd != null && (
+        <span
+          className="chip"
+          title="API-equivalent cost. Pro / Max subscriptions cover this — you are not billed it."
+        >
+          ${costUsd.toFixed(4)}
+        </span>
+      )}
       {openable && <span className="activity-open">View log ›</span>}
     </button>
   );

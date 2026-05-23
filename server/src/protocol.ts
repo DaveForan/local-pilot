@@ -55,6 +55,14 @@ export type SessionEvent =
       isError: boolean;
       durationMs: number | null;
       costUsd: number | null;
+      /** Token usage as reported by the SDK — lets the UI show the math
+       *  behind `costUsd` (cache reads are billed ~10% of normal input). */
+      tokens?: {
+        input: number;
+        output: number;
+        cacheRead: number;
+        cacheCreate: number;
+      };
       text: string;
     }
   | {

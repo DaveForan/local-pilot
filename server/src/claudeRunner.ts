@@ -44,6 +44,12 @@ export type RunnerEvent =
       isError: boolean;
       durationMs: number | null;
       costUsd: number | null;
+      tokens?: {
+        input: number;
+        output: number;
+        cacheRead: number;
+        cacheCreate: number;
+      };
       text: string;
     }
   | { kind: 'claude_session'; claudeSessionId: string; model: string | null };
@@ -247,11 +253,26 @@ export class ClaudeRunner {
       }
       case 'result': {
         const ok = msg.subtype === 'success' && msg.is_error !== true;
+        // The SDK reports a `usage` block (input/output/cache tokens) and a
+        // `total_cost_usd` it computed from those tokens × current model
+        // prices. We surface both so the UI can show the math, not just the
+        // total. The 'cache_*_input_tokens' field names mirror Anthropic's
+        // API exactly.
+        const usage = msg.usage as Record<string, unknown> | undefined;
+        const tokens = usage
+          ? {
+              input: Number(usage.input_tokens ?? 0) || 0,
+              output: Number(usage.output_tokens ?? 0) || 0,
+              cacheRead: Number(usage.cache_read_input_tokens ?? 0) || 0,
+              cacheCreate: Number(usage.cache_creation_input_tokens ?? 0) || 0,
+            }
+          : undefined;
         this.opts.onEvent({
           kind: 'result',
           isError: !ok,
           durationMs: typeof msg.duration_ms === 'number' ? msg.duration_ms : null,
           costUsd: typeof msg.total_cost_usd === 'number' ? msg.total_cost_usd : null,
+          tokens,
           text: ok ? 'Turn complete' : `Turn ended: ${msg.subtype ?? 'error'}`,
         });
         break;
