@@ -35,6 +35,13 @@ export interface SlashCommand {
   argumentHint: string;
 }
 
+/** A model the account has access to — matches the SDK's `ModelInfo` shape. */
+export interface ModelInfo {
+  value: string;
+  displayName: string;
+  description: string;
+}
+
 /** Result of a rewindFiles() call. */
 export interface RewindResult {
   canRewind: boolean;

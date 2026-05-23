@@ -12,6 +12,7 @@ import type {
   PermissionDecision,
   ChatImage,
   SlashCommand,
+  ModelInfo,
 } from './protocol';
 
 type PermissionEvent = Extract<SessionEvent, { kind: 'permission' }>;
@@ -28,6 +29,8 @@ export interface SessionHooks {
   onMeta(meta: SessionMeta): void;
   onPermission(request: PermissionRequest): void;
   persist(session: Session): void;
+  /** Cache the account-wide model list any session learns about. */
+  onModels(models: ModelInfo[]): void;
 }
 
 /**
@@ -212,6 +215,10 @@ export class Session {
           this.meta.slashCommands = event.commands;
           this.hooks.onMeta(this.meta);
         }
+        break;
+      }
+      case 'models': {
+        this.hooks.onModels(event.models);
         break;
       }
       case 'user_uuid': {

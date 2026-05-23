@@ -1,7 +1,7 @@
 // Thin REST client for everything that is not the live session stream.
 // Auth rides on an HttpOnly session cookie, so requests carry no secret.
 
-import type { RewindResult } from './protocol';
+import type { RewindResult, ModelInfo } from './protocol';
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -93,6 +93,7 @@ export const api = {
   setTtsVoice: (voice: string) => req<{ ok: true }>('POST', '/tts/voice', { voice }),
   /** Build the export URL — used as an href so the browser handles the download. */
   exportUrl: (sessionId: string) => `/api/sessions/${encodeURIComponent(sessionId)}/export`,
+  models: () => req<ModelInfo[]>('GET', '/models'),
   rewindSession: (sessionId: string, userUuid: string, dryRun: boolean) =>
     req<RewindResult>('POST', `/sessions/${encodeURIComponent(sessionId)}/rewind`, {
       userUuid,

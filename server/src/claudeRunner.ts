@@ -1,5 +1,5 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { PermissionMode, ChatImage, SlashCommand } from './protocol';
+import type { PermissionMode, ChatImage, SlashCommand, ModelInfo } from './protocol';
 
 // --- SDK boundary -----------------------------------------------------------
 // The Agent SDK's exact TypeScript surface is verified separately. To keep the
@@ -22,6 +22,10 @@ interface LooseQuery extends AsyncGenerator<Record<string, any>> {
    *  only; this is where the descriptions actually come from. */
   supportedCommands?: () => Promise<
     Array<{ name: string; description: string; argumentHint: string }>
+  >;
+  /** Models available to this account — id, display name, description. */
+  supportedModels?: () => Promise<
+    Array<{ value: string; displayName: string; description: string }>
   >;
   /** Restore tracked files to their state at the given user-message uuid.
    *  Requires enableFileCheckpointing: true at start. */
@@ -80,6 +84,7 @@ export type RunnerEvent =
       slashCommands: SlashCommand[];
     }
   | { kind: 'slash_commands'; commands: SlashCommand[] }
+  | { kind: 'models'; models: ModelInfo[] }
   /** SDK echoed back a user message — carries the uuid we need to rewind to. */
   | { kind: 'user_uuid'; uuid: string };
 
@@ -260,8 +265,9 @@ export class ClaudeRunner {
                 argumentHint: '',
               })),
             });
-            // Once we've seen init, fetch the full per-command metadata.
-            void this.fetchSlashCommandDetails();
+            // Once we've seen init, fetch control-channel metadata
+            // (slash command descriptions, available models).
+            void this.fetchControlMetadata();
           }
           this.opts.onEvent({
             kind: 'system',
@@ -350,28 +356,49 @@ export class ClaudeRunner {
     }
   }
 
-  /** Ask the SDK for full slash-command metadata over the control channel.
-   *  The init message only carries names; this is where descriptions and
-   *  argument hints come from. Best-effort — older SDK builds may not
-   *  expose the method, in which case the UI keeps the name-only list. */
-  private async fetchSlashCommandDetails(): Promise<void> {
+  /** Ask the SDK for control-channel metadata (slash command descriptions,
+   *  available models) once per runner, right after init. Best-effort —
+   *  failures fall back to the name-only / hardcoded lists. */
+  private async fetchControlMetadata(): Promise<void> {
     if (this.commandsFetched || this.stopped) return;
     this.commandsFetched = true;
     const gen = this.generator;
-    if (!gen || typeof gen.supportedCommands !== 'function') return;
-    try {
-      const list = await gen.supportedCommands();
-      if (this.stopped || !Array.isArray(list)) return;
-      const commands: SlashCommand[] = list
-        .filter((c) => c && typeof c.name === 'string')
-        .map((c) => ({
-          name: c.name,
-          description: typeof c.description === 'string' ? c.description : '',
-          argumentHint: typeof c.argumentHint === 'string' ? c.argumentHint : '',
-        }));
-      this.opts.onEvent({ kind: 'slash_commands', commands });
-    } catch (err) {
-      console.warn('[runner] supportedCommands failed:', err);
+    if (!gen) return;
+
+    if (typeof gen.supportedCommands === 'function') {
+      try {
+        const list = await gen.supportedCommands();
+        if (!this.stopped && Array.isArray(list)) {
+          const commands: SlashCommand[] = list
+            .filter((c) => c && typeof c.name === 'string')
+            .map((c) => ({
+              name: c.name,
+              description: typeof c.description === 'string' ? c.description : '',
+              argumentHint: typeof c.argumentHint === 'string' ? c.argumentHint : '',
+            }));
+          this.opts.onEvent({ kind: 'slash_commands', commands });
+        }
+      } catch (err) {
+        console.warn('[runner] supportedCommands failed:', err);
+      }
+    }
+
+    if (typeof gen.supportedModels === 'function') {
+      try {
+        const list = await gen.supportedModels();
+        if (!this.stopped && Array.isArray(list)) {
+          const models: ModelInfo[] = list
+            .filter((m) => m && typeof m.value === 'string')
+            .map((m) => ({
+              value: m.value,
+              displayName: typeof m.displayName === 'string' ? m.displayName : m.value,
+              description: typeof m.description === 'string' ? m.description : '',
+            }));
+          this.opts.onEvent({ kind: 'models', models });
+        }
+      } catch (err) {
+        console.warn('[runner] supportedModels failed:', err);
+      }
     }
   }
 

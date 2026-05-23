@@ -90,6 +90,13 @@ export function createApiRouter(manager: SessionManager) {
     },
   );
 
+  // --- model catalog -------------------------------------------------------
+  // The SDK reports this list over the control channel once a runner starts;
+  // the manager caches the latest. Empty until at least one session has run.
+  router.get('/models', (_req, res) => {
+    res.json(manager.models());
+  });
+
   // --- file rewind ---------------------------------------------------------
   // Body: { userUuid: string, dryRun?: boolean }. Returns a RewindResult.
   router.post('/sessions/:id/rewind', async (req, res) => {

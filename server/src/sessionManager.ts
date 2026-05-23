@@ -6,12 +6,21 @@ import type { Broadcaster } from './wsHub';
 import { saveSession, deleteSessionFile, loadAllSessions } from './store';
 import { sendPush } from './push';
 import { DEFAULT_CWD } from './config';
-import type { SessionMeta, PermissionMode, PermissionDecision, ChatImage } from './protocol';
+import type {
+  SessionMeta,
+  PermissionMode,
+  PermissionDecision,
+  ChatImage,
+  ModelInfo,
+} from './protocol';
 
 /** Owns every Session, wires their hooks to the WebSocket broadcaster. */
 export class SessionManager {
   private readonly sessions = new Map<string, Session>();
   private broadcaster: Broadcaster | null = null;
+  /** Account-wide model list, populated lazily by any running session.
+   *  Empty until the first session's runner has started. */
+  private cachedModels: ModelInfo[] = [];
 
   setBroadcaster(b: Broadcaster): void {
     this.broadcaster = b;
@@ -28,6 +37,10 @@ export class SessionManager {
       );
     }
     console.log(`[manager] loaded ${this.sessions.size} session(s)`);
+  }
+
+  models(): ModelInfo[] {
+    return this.cachedModels;
   }
 
   list(): SessionMeta[] {
@@ -126,6 +139,9 @@ export class SessionManager {
       },
       persist: (session) => {
         void saveSession(session.toPersisted());
+      },
+      onModels: (models) => {
+        this.cachedModels = models;
       },
     };
   }

@@ -1,18 +1,47 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import type { DirListing } from '../api';
-import type { PermissionMode } from '../protocol';
+import type { PermissionMode, ModelInfo } from '../protocol';
 import { store } from '../store';
 import { useEscapeClose } from '../useModal';
+
+/** Fallback list used until the SDK reports the real catalog via supportedModels(). */
+const FALLBACK_MODELS: ModelInfo[] = [
+  { value: 'claude-opus-4-7', displayName: 'Claude Opus 4.7', description: 'Most capable' },
+  { value: 'claude-sonnet-4-6', displayName: 'Claude Sonnet 4.6', description: 'Balanced' },
+  {
+    value: 'claude-haiku-4-5-20251001',
+    displayName: 'Claude Haiku 4.5',
+    description: 'Fastest',
+  },
+];
 
 export function NewSessionDialog({ onClose }: { onClose: () => void }) {
   useEscapeClose(onClose);
   const [listing, setListing] = useState<DirListing | null>(null);
   const [title, setTitle] = useState('');
   const [mode, setMode] = useState<PermissionMode>('default');
+  const [models, setModels] = useState<ModelInfo[]>(FALLBACK_MODELS);
   // Always an explicit, deliberate model — no "default" pass-through.
-  const [model, setModel] = useState('claude-opus-4-7');
+  const [model, setModel] = useState(FALLBACK_MODELS[0].value);
   const [err, setErr] = useState<string | null>(null);
+
+  // Pull the real catalog if the SDK has reported one yet. Empty list means
+  // no session has run yet this server boot — stick with the fallback.
+  useEffect(() => {
+    api
+      .models()
+      .then((list) => {
+        if (list.length > 0) {
+          setModels(list);
+          if (!list.find((m) => m.value === model)) setModel(list[0].value);
+        }
+      })
+      .catch(() => {
+        /* keep fallback */
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const browse = (path?: string): void => {
     setErr(null);
@@ -61,9 +90,12 @@ export function NewSessionDialog({ onClose }: { onClose: () => void }) {
         <label className="field">
           <span>Model</span>
           <select value={model} onChange={(e) => setModel(e.target.value)}>
-            <option value="claude-opus-4-7">Claude Opus 4.7 — most capable</option>
-            <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — balanced</option>
-            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fastest</option>
+            {models.map((m) => (
+              <option key={m.value} value={m.value} title={m.description}>
+                {m.displayName}
+                {m.description ? ` — ${m.description}` : ''}
+              </option>
+            ))}
           </select>
         </label>
 
