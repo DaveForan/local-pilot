@@ -243,6 +243,15 @@ export function Drawer({
                 <span>Model</span>
                 <span className="cs-mono">{activeModel ?? 'not yet started'}</span>
               </div>
+              {active.outputStyle && (
+                <div
+                  className="cs-row"
+                  title="Change with the /output-style slash command"
+                >
+                  <span>Output style</span>
+                  <span className="cs-mono">{active.outputStyle}</span>
+                </div>
+              )}
               {totals && totals.turns > 0 && (
                 <>
                   <div className="cs-row">

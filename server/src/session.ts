@@ -218,6 +218,10 @@ export class Session {
           this.meta.slashCommands = event.slashCommands;
           changed = true;
         }
+        if (event.outputStyle && this.meta.outputStyle !== event.outputStyle) {
+          this.meta.outputStyle = event.outputStyle;
+          changed = true;
+        }
         if (changed) this.hooks.onMeta(this.meta);
         break;
       }

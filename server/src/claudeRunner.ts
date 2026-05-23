@@ -99,6 +99,8 @@ export type RunnerEvent =
        *  At init we only have names — descriptions arrive via the follow-up
        *  `slash_commands` event once the control-channel RPC resolves. */
       slashCommands: SlashCommand[];
+      /** Active output style at init time. */
+      outputStyle: string | null;
     }
   | { kind: 'slash_commands'; commands: SlashCommand[] }
   | { kind: 'models'; models: ModelInfo[] }
@@ -282,6 +284,7 @@ export class ClaudeRunner {
                 description: '',
                 argumentHint: '',
               })),
+              outputStyle: typeof msg.output_style === 'string' ? msg.output_style : null,
             });
             // Once we've seen init, fetch control-channel metadata
             // (slash command descriptions, available models).

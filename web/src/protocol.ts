@@ -26,6 +26,9 @@ export interface SessionMeta {
    *  Names come from the init message; description + argumentHint are
    *  enriched once the control-channel `supportedCommands()` RPC resolves. */
   slashCommands?: SlashCommand[];
+  /** Currently active output style (e.g. "default"). The SDK has no setter
+   *  via the runtime API — change it with the /output-style slash command. */
+  outputStyle?: string;
 }
 
 /** Metadata for one slash command — matches the SDK's `SlashCommand` shape. */
