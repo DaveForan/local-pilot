@@ -15,6 +15,10 @@ type ActivityEvent = Extract<
 type PermissionEvent = Extract<SessionEvent, { kind: 'permission' }>;
 type ResultEvent = Extract<SessionEvent, { kind: 'result' }>;
 type ToolUseEvent = Extract<SessionEvent, { kind: 'tool_use' }>;
+type CompactionEvent = Extract<SessionEvent, { kind: 'compaction' }>;
+
+/** A timeline entry is either a normal turn or a compaction divider. */
+type TimelineItem = (Turn & { itemKind: 'turn' }) | (CompactionEvent & { itemKind: 'compaction' });
 
 /** One Claude turn: a user message and everything Claude did in response. */
 export interface Turn {
@@ -34,9 +38,13 @@ export interface Turn {
   result: ResultEvent | null;
 }
 
-/** Fold the flat event log into turns so each renders as one activity + reply. */
-function groupTurns(events: SessionEvent[]): Turn[] {
-  const turns: Turn[] = [];
+/** Fold the flat event log into turns *and* compaction dividers so the UI
+ *  renders both in order. */
+function groupTimeline(events: SessionEvent[]): TimelineItem[] {
+  // Items are emitted in event order: a fresh Turn object for every user
+  // message (or the first non-user event before any user), and a divider
+  // record whenever the SDK reports a compaction.
+  const items: TimelineItem[] = [];
   let cur: Turn | null = null;
   // Per-turn set of TodoWrite tool ids so their acknowledgement results stay
   // out of the generic activity log.
@@ -54,10 +62,19 @@ function groupTurns(events: SessionEvent[]): Turn[] {
       result: null,
     };
     todoToolIds = new Set<string>();
-    turns.push(cur);
+    // We push the Turn *object* into items; later mutations on that same
+    // object (text, activity, etc.) stay visible because items holds a ref.
+    items.push(Object.assign(cur, { itemKind: 'turn' as const }) as TimelineItem);
     return cur;
   };
   for (const e of events) {
+    if (e.kind === 'compaction') {
+      // Compactions sit between turns — close the current one and emit a
+      // divider so the user sees their history was summarized.
+      cur = null;
+      items.push({ ...e, itemKind: 'compaction' });
+      continue;
+    }
     if (e.kind === 'user') {
       const t = open(e.seq);
       t.userText = e.text;
@@ -94,7 +111,7 @@ function groupTurns(events: SessionEvent[]): Turn[] {
         break;
     }
   }
-  return turns;
+  return items;
 }
 
 interface Props {
@@ -119,14 +136,19 @@ export function Timeline({ sessionId, events, status, voiceMode, onReplySpoken }
   } | null>(null);
   const [visible, setVisible] = useState(INITIAL_VISIBLE_TURNS);
   const spokenRef = useRef<number>(-1);
-  const turns = useMemo(() => groupTurns(events), [events]);
+  const items = useMemo(() => groupTimeline(events), [events]);
+  const turns = useMemo(
+    () => items.filter((i): i is TimelineItem & { itemKind: 'turn' } => i.itemKind === 'turn'),
+    [items],
+  );
   // Look the open turn up by key each render so the log keeps updating live.
   const logTurn = logKey == null ? null : turns.find((t) => t.key === logKey) ?? null;
 
-  // For long sessions, only keep the most recent N turns in the DOM. The
+  // For long sessions, only keep the most recent N items in the DOM. The
   // "Load earlier" header expands the window on demand.
-  const hiddenCount = Math.max(0, turns.length - visible);
-  const shownTurns = hiddenCount > 0 ? turns.slice(hiddenCount) : turns;
+  const hiddenCount = Math.max(0, items.length - visible);
+  const shownItems = hiddenCount > 0 ? items.slice(hiddenCount) : items;
+  const lastTurnKey = turns.length > 0 ? turns[turns.length - 1].key : null;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -169,26 +191,28 @@ export function Timeline({ sessionId, events, status, voiceMode, onReplySpoken }
           {hiddenCount > MORE_PER_CLICK ? ` of ${hiddenCount}` : ''}
         </button>
       )}
-      {shownTurns.map((turn) => {
-        const realIdx = hiddenCount + shownTurns.indexOf(turn);
-        const isLast = realIdx === turns.length - 1;
+      {shownItems.map((item) => {
+        if (item.itemKind === 'compaction') {
+          return <CompactionDivider key={`c-${item.seq}`} event={item} />;
+        }
+        const isLast = item.key === lastTurnKey;
         return (
           <TurnView
-            key={turn.key}
+            key={item.key}
             sessionId={sessionId}
-            turn={turn}
+            turn={item}
             running={
               isLast &&
-              !turn.result &&
+              !item.result &&
               (status === 'running' || status === 'awaiting_permission')
             }
-            onOpenLog={() => setLogKey(turn.key)}
+            onOpenLog={() => setLogKey(item.key)}
             onRewind={
-              turn.userUuid
+              item.userUuid
                 ? () =>
                     setRewindTarget({
-                      userUuid: turn.userUuid!,
-                      userText: turn.userText ?? '',
+                      userUuid: item.userUuid!,
+                      userText: item.userText ?? '',
                     })
                 : null
             }
@@ -348,6 +372,25 @@ function SpeakButton({ text }: { text: string }) {
     >
       {speaking ? '◼ Stop' : '🔊 Read aloud'}
     </button>
+  );
+}
+
+function fmtCompactTokens(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
+  return `${(n / 1_000_000).toFixed(2)}M`;
+}
+
+function CompactionDivider({ event }: { event: CompactionEvent }) {
+  const triggerLabel = event.trigger === 'auto' ? 'auto-compacted' : 'compacted';
+  return (
+    <div className="compaction-divider" role="separator" aria-label="History compacted">
+      <span className="compaction-line" />
+      <span className="compaction-label">
+        ↻ History {triggerLabel} · {fmtCompactTokens(event.preTokens)} tokens before
+      </span>
+      <span className="compaction-line" />
+    </div>
   );
 }
 

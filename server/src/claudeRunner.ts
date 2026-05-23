@@ -78,6 +78,7 @@ export type RunnerEvent =
       images: ChatImage[];
     }
   | { kind: 'system'; text: string }
+  | { kind: 'compaction'; trigger: 'auto' | 'manual'; preTokens: number }
   | {
       kind: 'result';
       isError: boolean;
@@ -300,6 +301,16 @@ export class ClaudeRunner {
             kind: 'system',
             text: `Session ready · model ${msg.model ?? 'default'}`,
           });
+        } else if (msg.subtype === 'compact_boundary') {
+          // The SDK just summarized older history to free up context. The
+          // metadata tells us whether it was auto- or user-triggered and how
+          // much was in the window beforehand.
+          const meta = msg.compact_metadata as
+            | { trigger?: string; pre_tokens?: number }
+            | undefined;
+          const trigger = meta?.trigger === 'manual' ? 'manual' : 'auto';
+          const preTokens = Number(meta?.pre_tokens ?? 0) || 0;
+          this.opts.onEvent({ kind: 'compaction', trigger, preTokens });
         }
         break;
       }

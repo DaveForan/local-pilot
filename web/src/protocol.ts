@@ -122,6 +122,14 @@ export type SessionEvent =
   | {
       seq: number;
       ts: number;
+      kind: 'compaction';
+      /** auto = SDK shrunk history to fit the context window; manual = user-triggered. */
+      trigger: 'auto' | 'manual';
+      preTokens: number;
+    }
+  | {
+      seq: number;
+      ts: number;
       kind: 'permission';
       requestId: string;
       toolName: string;

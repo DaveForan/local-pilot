@@ -291,6 +291,13 @@ export class Session {
       case 'system':
         this.add({ kind: 'system', text: event.text });
         break;
+      case 'compaction':
+        this.add({
+          kind: 'compaction',
+          trigger: event.trigger,
+          preTokens: event.preTokens,
+        });
+        break;
       case 'result':
         this.add(
           event.tokens

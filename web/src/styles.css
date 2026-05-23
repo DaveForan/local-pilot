@@ -565,6 +565,25 @@ textarea {
   word-break: break-word;
 }
 
+/* SDK auto-compaction marker — drops a horizontal rule between turns */
+.compaction-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+}
+.compaction-line {
+  flex: 1;
+  height: 1px;
+  background: var(--line-soft);
+}
+.compaction-label {
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
 /* in-session find bar — floats above the timeline, summoned with Ctrl-F */
 .search-bar {
   position: absolute;
