@@ -16,6 +16,7 @@ import { transcribe, whisperReady } from './whisper';
 import { synthesize, ttsReady, listVoices, setVoice } from './tts';
 import type { SessionManager } from './sessionManager';
 import { exportSessionMarkdown } from './sessionExport';
+import { paths } from './config';
 
 /** REST endpoints for everything that is not the live session stream. */
 export function createApiRouter(manager: SessionManager) {
@@ -219,6 +220,31 @@ export function createApiRouter(manager: SessionManager) {
         if (typeof cmd === 'string' && cmd.trim()) clean[name as HookEventName] = cmd;
       }
       writeHooks(clean);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // --- crash log -----------------------------------------------------------
+  // The web ErrorBoundary POSTs here when render crashes. Append-only;
+  // each line is a compact JSON record with timestamp + ua + stacks so
+  // we can correlate after the fact.
+  router.post('/crash', async (req, res) => {
+    try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const record = {
+        ts: new Date().toISOString(),
+        message: typeof body.message === 'string' ? body.message : String(body.message ?? ''),
+        url: typeof body.url === 'string' ? body.url : '',
+        userAgent: typeof body.userAgent === 'string' ? body.userAgent : '',
+        stack: typeof body.stack === 'string' ? body.stack : null,
+        componentStack:
+          typeof body.componentStack === 'string' ? body.componentStack : null,
+      };
+      await fs.mkdir(path.dirname(paths.crashLog), { recursive: true });
+      await fs.appendFile(paths.crashLog, JSON.stringify(record) + '\n');
+      console.warn(`[crash] ${record.message}`);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: String(err) });

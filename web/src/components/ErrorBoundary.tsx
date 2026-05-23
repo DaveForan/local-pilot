@@ -16,6 +16,23 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('[error-boundary]', error, info);
+    // Best-effort upload to the server so we can debug renderer crashes after
+    // the fact. No await — the boundary still renders synchronously.
+    void fetch('/api/crash', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: error.message,
+        stack: error.stack ?? null,
+        componentStack: info.componentStack ?? null,
+        url: location.href,
+        userAgent: navigator.userAgent,
+        ts: Date.now(),
+      }),
+    }).catch(() => {
+      /* offline / cookie expired — nothing to do */
+    });
   }
 
   render(): ReactNode {

@@ -22,6 +22,8 @@ export const paths = {
   hooks: path.join(DATA_DIR, 'hooks.json'),
   // Local plugin paths loaded into every session (SdkPluginConfig[]).
   plugins: path.join(DATA_DIR, 'plugins.json'),
+  // Append-only log of crashes the web ErrorBoundary uploaded.
+  crashLog: path.join(DATA_DIR, 'crashes.log'),
   // Web-push: generated VAPID keypair and the browser subscriptions.
   vapid: path.join(DATA_DIR, 'vapid.json'),
   pushSubs: path.join(DATA_DIR, 'push-subscriptions.json'),
