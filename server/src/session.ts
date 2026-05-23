@@ -14,6 +14,7 @@ import type {
   SlashCommand,
   ModelInfo,
   McpServerStatus,
+  AccountInfo,
 } from './protocol';
 
 type PermissionEvent = Extract<SessionEvent, { kind: 'permission' }>;
@@ -32,6 +33,8 @@ export interface SessionHooks {
   persist(session: Session): void;
   /** Cache the account-wide model list any session learns about. */
   onModels(models: ModelInfo[]): void;
+  /** Cache the authenticated account info. */
+  onAccount(account: AccountInfo): void;
 }
 
 /**
@@ -229,6 +232,10 @@ export class Session {
       }
       case 'models': {
         this.hooks.onModels(event.models);
+        break;
+      }
+      case 'account': {
+        this.hooks.onAccount(event.account);
         break;
       }
       case 'user_uuid': {

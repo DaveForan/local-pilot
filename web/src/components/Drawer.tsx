@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { SessionMeta, SessionEvent, PermissionMode } from '../protocol';
+import { useEffect, useState } from 'react';
+import type { SessionMeta, SessionEvent, PermissionMode, AccountInfo } from '../protocol';
 import { store } from '../store';
 import { relativeTime, shortPath } from '../format';
 import { STATUS } from './status';
@@ -108,6 +108,15 @@ export function Drawer({
   const [filter, setFilter] = useState('');
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [account, setAccount] = useState<AccountInfo | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    api
+      .account()
+      .then((r) => setAccount(r.account))
+      .catch(() => setAccount(null));
+  }, [open]);
 
   const filtered = filter.trim()
     ? sessions.filter((s) => {
@@ -306,6 +315,14 @@ export function Drawer({
         </div>
 
         <div className="drawer-foot">
+          {account && (account.email || account.organization) && (
+            <div className="drawer-account">
+              {account.email && <div className="drawer-account-email">{account.email}</div>}
+              <div className="drawer-account-sub">
+                {[account.organization, account.subscriptionType].filter(Boolean).join(' · ')}
+              </div>
+            </div>
+          )}
           <button className="drawer-nav-item" onClick={onOpenSettings}>
             <span className="drawer-nav-icon">⚙</span> Settings
           </button>

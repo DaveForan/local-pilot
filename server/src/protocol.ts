@@ -42,6 +42,15 @@ export interface ModelInfo {
   description: string;
 }
 
+/** Authenticated account info, as reported by the SDK. */
+export interface AccountInfo {
+  email?: string;
+  organization?: string;
+  subscriptionType?: string;
+  tokenSource?: string;
+  apiKeySource?: string;
+}
+
 /** Live status of one MCP server connection. */
 export interface McpServerStatus {
   name: string;

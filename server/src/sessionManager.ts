@@ -13,6 +13,7 @@ import type {
   ChatImage,
   ModelInfo,
   McpServerStatus,
+  AccountInfo,
 } from './protocol';
 
 /** Owns every Session, wires their hooks to the WebSocket broadcaster. */
@@ -22,6 +23,8 @@ export class SessionManager {
   /** Account-wide model list, populated lazily by any running session.
    *  Empty until the first session's runner has started. */
   private cachedModels: ModelInfo[] = [];
+  /** Authenticated account info — same lazy population. */
+  private cachedAccount: AccountInfo | null = null;
 
   setBroadcaster(b: Broadcaster): void {
     this.broadcaster = b;
@@ -42,6 +45,10 @@ export class SessionManager {
 
   models(): ModelInfo[] {
     return this.cachedModels;
+  }
+
+  account(): AccountInfo | null {
+    return this.cachedAccount;
   }
 
   /** Query MCP status from any session with a live runner. Returns null when
@@ -155,6 +162,9 @@ export class SessionManager {
       },
       onModels: (models) => {
         this.cachedModels = models;
+      },
+      onAccount: (account) => {
+        this.cachedAccount = account;
       },
     };
   }

@@ -5,6 +5,7 @@ import type {
   SlashCommand,
   ModelInfo,
   McpServerStatus,
+  AccountInfo,
 } from './protocol';
 
 // --- SDK boundary -----------------------------------------------------------
@@ -41,6 +42,8 @@ interface LooseQuery extends AsyncGenerator<Record<string, any>> {
       serverInfo?: { name: string; version: string };
     }>
   >;
+  /** Email / org / subscription info for the authenticated account. */
+  accountInfo?: () => Promise<AccountInfo>;
   /** Restore tracked files to their state at the given user-message uuid.
    *  Requires enableFileCheckpointing: true at start. */
   rewindFiles?: (
@@ -99,6 +102,7 @@ export type RunnerEvent =
     }
   | { kind: 'slash_commands'; commands: SlashCommand[] }
   | { kind: 'models'; models: ModelInfo[] }
+  | { kind: 'account'; account: AccountInfo }
   /** SDK echoed back a user message — carries the uuid we need to rewind to. */
   | { kind: 'user_uuid'; uuid: string };
 
@@ -412,6 +416,17 @@ export class ClaudeRunner {
         }
       } catch (err) {
         console.warn('[runner] supportedModels failed:', err);
+      }
+    }
+
+    if (typeof gen.accountInfo === 'function') {
+      try {
+        const info = await gen.accountInfo();
+        if (!this.stopped && info && typeof info === 'object') {
+          this.opts.onEvent({ kind: 'account', account: info });
+        }
+      } catch (err) {
+        console.warn('[runner] accountInfo failed:', err);
       }
     }
   }

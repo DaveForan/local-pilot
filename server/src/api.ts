@@ -97,6 +97,11 @@ export function createApiRouter(manager: SessionManager) {
     res.json(manager.models());
   });
 
+  // --- authenticated account info ------------------------------------------
+  router.get('/account', (_req, res) => {
+    res.json({ account: manager.account() });
+  });
+
   // --- live MCP server status ----------------------------------------------
   // Returns null when no session has a live runner — MCP connections live
   // inside the SDK process, so there's nothing to query yet.

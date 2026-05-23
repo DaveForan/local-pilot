@@ -213,6 +213,26 @@ textarea {
   gap: 2px;
 }
 
+/* signed-in account info, just above Settings */
+.drawer-account {
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 6px;
+}
+.drawer-account-email {
+  font-size: 13px;
+  color: var(--text-1);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drawer-account-sub {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
 .drawer-nav-item {
   display: flex;
   align-items: center;
