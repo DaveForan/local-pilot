@@ -152,6 +152,11 @@ export class ClaudeRunner {
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       settingSources: ['user', 'project', 'local'],
       canUseTool: async (toolName: string, input: Record<string, unknown>, extra: any) => {
+        // TodoWrite is tracking-only (no filesystem / no exec); auto-allow so
+        // the user isn't pestered every time Claude updates the task list.
+        if (toolName === 'TodoWrite') {
+          return { behavior: 'allow', updatedInput: input };
+        }
         const outcome = await this.opts.onPermission(toolName, input, extra?.suggestions);
         // `updatedInput` is required on an allow result — it is the input the
         // tool actually runs with (unchanged here unless the UI edited it).

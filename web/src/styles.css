@@ -909,6 +909,77 @@ textarea {
 .plan-revise {
   padding: 10px 14px;
 }
+.plan-intro {
+  padding: 10px 14px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* TodoWrite — inline checklist instead of a generic permission prompt */
+.ev-todo {
+  background: var(--bg-1);
+  border: 1px solid var(--line-soft);
+  border-left: 2px solid var(--accent);
+  border-radius: 11px;
+  padding: 10px 14px;
+}
+.todo-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.todo-badge {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 2px 7px;
+  border-radius: 5px;
+}
+.todo-count {
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--mono);
+}
+.todo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text);
+}
+.todo-mark {
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  color: var(--text-3);
+}
+.todo-completed .todo-content {
+  text-decoration: line-through;
+  color: var(--text-3);
+}
+.todo-completed .todo-mark {
+  color: var(--accent);
+}
+.todo-in_progress {
+  color: var(--accent-2);
+}
+.todo-in_progress .todo-mark {
+  color: var(--accent-2);
+  animation: pulse 1.6s ease-in-out infinite;
+}
 
 .composer-busy.needs-decision {
   background: var(--warn);

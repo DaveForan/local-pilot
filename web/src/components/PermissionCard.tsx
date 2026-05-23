@@ -4,6 +4,7 @@ import { store } from '../store';
 import { clockTime, formatValue } from '../format';
 import { AskUserQuestionCard } from './AskUserQuestionCard';
 import { PlanApprovalCard } from './PlanApprovalCard';
+import { EnterPlanModeCard } from './EnterPlanModeCard';
 
 type PermissionEvent = Extract<SessionEvent, { kind: 'permission' }>;
 
@@ -21,6 +22,9 @@ export function PermissionCard({
   }
   if (event.toolName === 'ExitPlanMode') {
     return <PlanApprovalCard sessionId={sessionId} event={event} />;
+  }
+  if (event.toolName === 'EnterPlanMode') {
+    return <EnterPlanModeCard sessionId={sessionId} event={event} />;
   }
   return <GenericPermissionCard sessionId={sessionId} event={event} />;
 }

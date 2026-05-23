@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import type { SessionEvent, SessionStatus, ChatImage } from '../protocol';
 import { PermissionCard } from './PermissionCard';
 import { ActivityLog } from './ActivityLog';
+import { TodoCard } from './TodoCard';
 import { speak, stopSpeaking, speechOutputSupported } from '../speech';
 
 type ActivityEvent = Extract<
@@ -12,6 +13,7 @@ type ActivityEvent = Extract<
 >;
 type PermissionEvent = Extract<SessionEvent, { kind: 'permission' }>;
 type ResultEvent = Extract<SessionEvent, { kind: 'result' }>;
+type ToolUseEvent = Extract<SessionEvent, { kind: 'tool_use' }>;
 
 /** One Claude turn: a user message and everything Claude did in response. */
 export interface Turn {
@@ -24,6 +26,8 @@ export interface Turn {
   /** Assistant text blocks — shown as the visible response. */
   texts: string[];
   permissions: PermissionEvent[];
+  /** Latest TodoWrite tool call in the turn — rendered inline as a checklist. */
+  lastTodo: ToolUseEvent | null;
   result: ResultEvent | null;
 }
 
@@ -31,6 +35,9 @@ export interface Turn {
 function groupTurns(events: SessionEvent[]): Turn[] {
   const turns: Turn[] = [];
   let cur: Turn | null = null;
+  // Per-turn set of TodoWrite tool ids so their acknowledgement results stay
+  // out of the generic activity log.
+  let todoToolIds = new Set<string>();
   const open = (key: number): Turn => {
     cur = {
       key,
@@ -39,8 +46,10 @@ function groupTurns(events: SessionEvent[]): Turn[] {
       activity: [],
       texts: [],
       permissions: [],
+      lastTodo: null,
       result: null,
     };
+    todoToolIds = new Set<string>();
     turns.push(cur);
     return cur;
   };
@@ -57,7 +66,17 @@ function groupTurns(events: SessionEvent[]): Turn[] {
         t.texts.push(e.text);
         break;
       case 'tool_use':
+        if (e.name === 'TodoWrite') {
+          t.lastTodo = e;
+          todoToolIds.add(e.toolId);
+        } else {
+          t.activity.push(e);
+        }
+        break;
       case 'tool_result':
+        if (todoToolIds.has(e.toolId)) break; // TodoWrite ack — shown via the card
+        t.activity.push(e);
+        break;
       case 'thinking':
       case 'system':
         t.activity.push(e);
@@ -195,6 +214,8 @@ function TurnView({
       {turn.permissions.map((p) => (
         <PermissionCard key={p.seq} sessionId={sessionId} event={p} />
       ))}
+
+      {turn.lastTodo && <TodoCard event={turn.lastTodo} />}
 
       {responseText && (
         <div className="ev ev-assistant">
