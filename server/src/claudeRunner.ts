@@ -1,5 +1,5 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { PermissionMode, ChatImage } from './protocol';
+import type { PermissionMode, ChatImage, SlashCommand } from './protocol';
 
 // --- SDK boundary -----------------------------------------------------------
 // The Agent SDK's exact TypeScript surface is verified separately. To keep the
@@ -17,6 +17,12 @@ interface LooseQuery extends AsyncGenerator<Record<string, any>> {
   interrupt?: () => Promise<void>;
   setPermissionMode?: (mode: string) => Promise<void> | void;
   close?: () => void;
+  /** Control-channel RPC — returns rich metadata (description, argumentHint)
+   *  for every available slash command. The init system message gives names
+   *  only; this is where the descriptions actually come from. */
+  supportedCommands?: () => Promise<
+    Array<{ name: string; description: string; argumentHint: string }>
+  >;
 }
 
 const runQuery = query as unknown as (arg: {
@@ -56,9 +62,12 @@ export type RunnerEvent =
       kind: 'claude_session';
       claudeSessionId: string;
       model: string | null;
-      /** Slash commands the SDK exposes for this session (e.g. /help, /clear). */
-      slashCommands: string[];
-    };
+      /** Slash commands the SDK exposes for this session (e.g. /help, /clear).
+       *  At init we only have names — descriptions arrive via the follow-up
+       *  `slash_commands` event once the control-channel RPC resolves. */
+      slashCommands: SlashCommand[];
+    }
+  | { kind: 'slash_commands'; commands: SlashCommand[] };
 
 export interface PermissionOutcome {
   behavior: 'allow' | 'deny';
@@ -127,6 +136,8 @@ export class ClaudeRunner {
   private generator: LooseQuery | null = null;
   private started = false;
   private stopped = false;
+  /** Don't issue the supportedCommands RPC more than once per runner. */
+  private commandsFetched = false;
 
   constructor(opts: RunnerOptions) {
     this.opts = opts;
@@ -210,14 +221,21 @@ export class ClaudeRunner {
       case 'system': {
         if (msg.subtype === 'init') {
           if (msg.session_id) {
+            const names = Array.isArray(msg.slash_commands)
+              ? (msg.slash_commands as string[]).filter((s) => typeof s === 'string')
+              : [];
             this.opts.onEvent({
               kind: 'claude_session',
               claudeSessionId: msg.session_id,
               model: typeof msg.model === 'string' ? msg.model : null,
-              slashCommands: Array.isArray(msg.slash_commands)
-                ? (msg.slash_commands as string[]).filter((s) => typeof s === 'string')
-                : [],
+              slashCommands: names.map((name) => ({
+                name,
+                description: '',
+                argumentHint: '',
+              })),
             });
+            // Once we've seen init, fetch the full per-command metadata.
+            void this.fetchSlashCommandDetails();
           }
           this.opts.onEvent({
             kind: 'system',
@@ -296,6 +314,31 @@ export class ClaudeRunner {
         }
         break;
       }
+    }
+  }
+
+  /** Ask the SDK for full slash-command metadata over the control channel.
+   *  The init message only carries names; this is where descriptions and
+   *  argument hints come from. Best-effort — older SDK builds may not
+   *  expose the method, in which case the UI keeps the name-only list. */
+  private async fetchSlashCommandDetails(): Promise<void> {
+    if (this.commandsFetched || this.stopped) return;
+    this.commandsFetched = true;
+    const gen = this.generator;
+    if (!gen || typeof gen.supportedCommands !== 'function') return;
+    try {
+      const list = await gen.supportedCommands();
+      if (this.stopped || !Array.isArray(list)) return;
+      const commands: SlashCommand[] = list
+        .filter((c) => c && typeof c.name === 'string')
+        .map((c) => ({
+          name: c.name,
+          description: typeof c.description === 'string' ? c.description : '',
+          argumentHint: typeof c.argumentHint === 'string' ? c.argumentHint : '',
+        }));
+      this.opts.onEvent({ kind: 'slash_commands', commands });
+    } catch (err) {
+      console.warn('[runner] supportedCommands failed:', err);
     }
   }
 

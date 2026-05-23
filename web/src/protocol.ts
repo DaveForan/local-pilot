@@ -22,8 +22,17 @@ export interface SessionMeta {
   eventCount: number;
   /** Underlying Claude Code session id — used to resume after a server restart. */
   claudeSessionId: string | null;
-  /** Slash commands the SDK exposes for this session (populated after init). */
-  slashCommands?: string[];
+  /** Slash commands the SDK exposes for this session (populated after init).
+   *  Names come from the init message; description + argumentHint are
+   *  enriched once the control-channel `supportedCommands()` RPC resolves. */
+  slashCommands?: SlashCommand[];
+}
+
+/** Metadata for one slash command — matches the SDK's `SlashCommand` shape. */
+export interface SlashCommand {
+  name: string;
+  description: string;
+  argumentHint: string;
 }
 
 /** A base64-encoded image — attached by the user, or produced by a tool. */

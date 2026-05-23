@@ -7,7 +7,7 @@ import {
   type ClipboardEvent as ReactClipboardEvent,
   type DragEvent as ReactDragEvent,
 } from 'react';
-import type { SessionMeta, ChatImage } from '../protocol';
+import type { SessionMeta, ChatImage, SlashCommand } from '../protocol';
 import { store } from '../store';
 import { api } from '../api';
 import { prepareImage, type PreparedImage } from '../image';
@@ -42,7 +42,10 @@ const SLASH_SUGGEST_MAX = 8;
 
 /** Pick the slash-command suggestion list given the current input + available cmds.
  *  Returns null if the input isn't a slash-command-in-progress. */
-function slashSuggestions(text: string, commands: string[] | undefined): string[] | null {
+function slashSuggestions(
+  text: string,
+  commands: SlashCommand[] | undefined,
+): SlashCommand[] | null {
   if (!commands || commands.length === 0) return null;
   // Only when the input *starts* with a single "/" and has no spaces or newlines
   // yet — once arguments begin, get out of the way.
@@ -50,7 +53,7 @@ function slashSuggestions(text: string, commands: string[] | undefined): string[
   if (/\s/.test(text)) return null;
   const q = text.slice(1).toLowerCase();
   const matches = commands
-    .filter((c) => c.toLowerCase().startsWith(q))
+    .filter((c) => c.name.toLowerCase().startsWith(q))
     .slice(0, SLASH_SUGGEST_MAX);
   return matches.length > 0 ? matches : null;
 }
@@ -86,8 +89,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     if (slashList && slashIdx >= slashList.length) setSlashIdx(0);
   }, [slashList, slashIdx]);
 
-  const acceptSlash = (name: string): void => {
-    setText(`/${name} `);
+  const acceptSlash = (cmd: SlashCommand): void => {
+    setText(`/${cmd.name} `);
     setSlashIdx(0);
     requestAnimationFrame(() => textareaRef.current?.focus());
   };
@@ -546,9 +549,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         />
         {slashList && (
           <div className="slash-suggest" role="listbox" aria-label="Slash commands">
-            {slashList.map((name, i) => (
+            {slashList.map((cmd, i) => (
               <button
-                key={name}
+                key={cmd.name}
                 type="button"
                 role="option"
                 aria-selected={i === slashIdx}
@@ -556,11 +559,19 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                 onMouseEnter={() => setSlashIdx(i)}
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  acceptSlash(name);
+                  acceptSlash(cmd);
                 }}
               >
-                <span className="slash-suggest-slash">/</span>
-                <span className="slash-suggest-name">{name}</span>
+                <span className="slash-suggest-head">
+                  <span className="slash-suggest-slash">/</span>
+                  <span className="slash-suggest-name">{cmd.name}</span>
+                  {cmd.argumentHint && (
+                    <span className="slash-suggest-args">{cmd.argumentHint}</span>
+                  )}
+                </span>
+                {cmd.description && (
+                  <span className="slash-suggest-desc">{cmd.description}</span>
+                )}
               </button>
             ))}
             <div className="slash-suggest-hint">↑↓ to pick · Tab or Enter to insert · Esc to clear</div>

@@ -11,6 +11,7 @@ import type {
   PermissionRequest,
   PermissionDecision,
   ChatImage,
+  SlashCommand,
 } from './protocol';
 
 type PermissionEvent = Extract<SessionEvent, { kind: 'permission' }>;
@@ -175,11 +176,20 @@ export class Session {
           this.meta.model = event.model;
           changed = true;
         }
-        if (!arraysEqual(this.meta.slashCommands, event.slashCommands)) {
+        if (!slashCommandsEqual(this.meta.slashCommands, event.slashCommands)) {
           this.meta.slashCommands = event.slashCommands;
           changed = true;
         }
         if (changed) this.hooks.onMeta(this.meta);
+        break;
+      }
+      case 'slash_commands': {
+        // The control-channel RPC came back — replace the name-only list
+        // (seeded from the init message) with rich SlashCommand metadata.
+        if (!slashCommandsEqual(this.meta.slashCommands, event.commands)) {
+          this.meta.slashCommands = event.commands;
+          this.hooks.onMeta(this.meta);
+        }
         break;
       }
       case 'assistant':
@@ -297,9 +307,20 @@ function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-function arraysEqual(a: string[] | undefined, b: string[] | undefined): boolean {
+function slashCommandsEqual(
+  a: SlashCommand[] | undefined,
+  b: SlashCommand[] | undefined,
+): boolean {
   if (a === b) return true;
   if (!a || !b || a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (
+      a[i].name !== b[i].name ||
+      a[i].description !== b[i].description ||
+      a[i].argumentHint !== b[i].argumentHint
+    ) {
+      return false;
+    }
+  }
   return true;
 }
