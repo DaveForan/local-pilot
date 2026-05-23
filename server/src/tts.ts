@@ -12,6 +12,8 @@ import { paths } from './config';
 let binPath = '';
 let voicePath = '';
 let binDir = '';
+/** Extra args (e.g. ['--speaker','2']) — set when the voice is multi-speaker. */
+let extraArgs: string[] = [];
 
 /** Locate the Piper binary + voice recorded by the install script. */
 export function initTts(): boolean {
@@ -23,12 +25,48 @@ export function initTts(): boolean {
     binPath = '';
     voicePath = '';
     binDir = '';
+    extraArgs = [];
+    return false;
   }
+  extraArgs = resolveSpeakerArgs();
   return ttsReady();
 }
 
 export function ttsReady(): boolean {
   return Boolean(binPath && voicePath && existsSync(binPath) && existsSync(voicePath));
+}
+
+/**
+ * For multi-speaker voices (e.g. en_GB-semaine-medium), pick a speaker:
+ * LOCAL_PILOT_PIPER_SPEAKER may be a numeric id or a name from the model's
+ * speaker_id_map. Falls back to speaker 0 for multi-speaker voices.
+ */
+function resolveSpeakerArgs(): string[] {
+  let map: Record<string, number> = {};
+  try {
+    const cfg = JSON.parse(readFileSync(`${voicePath}.json`, 'utf8')) as {
+      speaker_id_map?: Record<string, number>;
+    };
+    map = cfg.speaker_id_map ?? {};
+  } catch {
+    return [];
+  }
+  if (Object.keys(map).length === 0) return []; // single-speaker — no arg needed
+
+  const requested = process.env.LOCAL_PILOT_PIPER_SPEAKER?.trim() ?? '';
+  if (/^\d+$/.test(requested)) {
+    return ['--speaker', requested];
+  }
+  if (requested) {
+    const id = map[requested];
+    if (typeof id === 'number') return ['--speaker', String(id)];
+    console.warn(
+      `[piper] unknown speaker "${requested}" — available: ${Object.keys(map).join(', ')}`,
+    );
+  }
+  // Default to the lowest-id entry in the map.
+  const defaultId = Math.min(...Object.values(map));
+  return ['--speaker', String(defaultId)];
 }
 
 /** Synthesize `text` into a WAV buffer. */
@@ -42,8 +80,7 @@ export async function synthesize(text: string): Promise<Buffer> {
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(
         binPath,
-        ['--model', voicePath, '--output_file', out],
-        // cwd = binDir so the binary finds its bundled libonnxruntime.so etc.
+        ['--model', voicePath, ...extraArgs, '--output_file', out],
         { cwd: binDir, stdio: ['pipe', 'ignore', 'pipe'] },
       );
       let stderr = '';

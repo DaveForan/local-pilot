@@ -125,6 +125,7 @@ as fallbacks — voice still works, just less accurate / more robotic.
 | `LOCAL_PILOT_TOKEN`        | _(auto-generated)_   | Access token; overrides the generated one |
 | `LOCAL_PILOT_WHISPER_MODEL`| `base.en`            | Whisper model used for voice transcription |
 | `LOCAL_PILOT_PIPER_VOICE`  | `en_US-amy-medium`   | Piper voice used for read-aloud |
+| `LOCAL_PILOT_PIPER_SPEAKER`| _(first speaker)_    | For multi-speaker voices: speaker name or numeric id |
 | `PUSH_SUBJECT`             | `mailto:local-pilot@localhost` | VAPID contact subject for web-push |
 
 ## Status
