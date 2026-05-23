@@ -18,6 +18,8 @@ export const paths = {
   // MCP servers local-pilot layers onto every session — kept in our own data
   // dir so we never have to rewrite the user's ~/.claude.json.
   mcp: path.join(DATA_DIR, 'mcp.json'),
+  // User-defined shell commands wired into the SDK's hook events.
+  hooks: path.join(DATA_DIR, 'hooks.json'),
   // Web-push: generated VAPID keypair and the browser subscriptions.
   vapid: path.join(DATA_DIR, 'vapid.json'),
   pushSubs: path.join(DATA_DIR, 'push-subscriptions.json'),

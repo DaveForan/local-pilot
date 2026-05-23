@@ -6,6 +6,8 @@ import { listSnippets, addSnippet, deleteSnippet } from './snippets';
 import { readSettings, writeSettings, listSkills } from './claudeConfig';
 import { readMcpServers, writeMcpServers } from './mcpConfig';
 import type { McpServers } from './mcpConfig';
+import { readHooks, writeHooks, HOOK_EVENT_NAMES } from './hooks';
+import type { HookConfig, HookEventName } from './hooks';
 import { vapidPublicKey, addSubscription, removeSubscription } from './push';
 import type { PushSubscriptionRecord } from './push';
 import { transcribe, whisperReady } from './whisper';
@@ -196,6 +198,25 @@ export function createApiRouter(manager: SessionManager) {
   router.put('/mcp', async (req, res) => {
     try {
       await writeMcpServers((req.body ?? {}) as McpServers);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // --- user-defined hooks --------------------------------------------------
+  router.get('/hooks', (_req, res) => {
+    res.json({ events: HOOK_EVENT_NAMES, config: readHooks() });
+  });
+  router.put('/hooks', (req, res) => {
+    try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const clean: HookConfig = {};
+      for (const name of HOOK_EVENT_NAMES) {
+        const cmd = body[name];
+        if (typeof cmd === 'string' && cmd.trim()) clean[name as HookEventName] = cmd;
+      }
+      writeHooks(clean);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: String(err) });

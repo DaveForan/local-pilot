@@ -131,6 +131,8 @@ export interface RunnerOptions {
   resumeSessionId: string | null;
   /** MCP servers local-pilot layers onto this session (may be empty). */
   mcpServers: Record<string, unknown>;
+  /** SDK-shaped hooks option, or null when the user has none configured. */
+  hooks: Record<string, unknown> | null;
   onEvent: (event: RunnerEvent) => void;
   onError: (err: unknown) => void;
   onEnd: () => void;
@@ -244,6 +246,7 @@ export class ClaudeRunner {
     if (Object.keys(this.opts.mcpServers).length > 0) {
       options.mcpServers = this.opts.mcpServers;
     }
+    if (this.opts.hooks) options.hooks = this.opts.hooks;
 
     try {
       this.generator = runQuery({ prompt: this.queue, options });

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api, type SkillInfo } from '../api';
 import { McpEditor } from './McpEditor';
+import { HooksEditor } from './HooksEditor';
 import { pushStatus, enablePush, disablePush, type PushStatus } from '../push';
 import { useEscapeClose } from '../useModal';
 
-type Tab = 'mcp' | 'skills' | 'voice' | 'push';
+type Tab = 'mcp' | 'hooks' | 'skills' | 'voice' | 'push';
 
 /** Settings modal — in-UI configuration of MCP servers and skills. */
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
@@ -35,6 +36,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             MCP servers
           </button>
           <button
+            className={`tab ${tab === 'hooks' ? 'on' : ''}`}
+            onClick={() => setTab('hooks')}
+          >
+            Hooks
+          </button>
+          <button
             className={`tab ${tab === 'skills' ? 'on' : ''}`}
             onClick={() => setTab('skills')}
           >
@@ -55,6 +62,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         {tab === 'mcp' && <McpEditor />}
+        {tab === 'hooks' && <HooksEditor />}
         {tab === 'skills' && <SkillsList />}
         {tab === 'voice' && <VoicePanel />}
         {tab === 'push' && <NotificationsPanel />}

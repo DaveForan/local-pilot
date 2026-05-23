@@ -2128,6 +2128,58 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* per-event hook config in Settings → Hooks */
+.hooks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.hook-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.hook-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.hook-name {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 13px;
+}
+.hook-when {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.hook-cmd {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  padding: 6px 8px;
+  resize: vertical;
+  min-height: 36px;
+  outline: none;
+}
+.hook-cmd:focus {
+  border-color: var(--accent);
+}
+.hook-doc {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+.saved-toast {
+  font-size: 12px;
+  color: var(--accent);
+}
+
 .mcp-form h4 {
   margin: 0 0 14px;
   font-family: var(--serif);

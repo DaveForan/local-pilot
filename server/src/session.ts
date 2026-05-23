@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import { ClaudeRunner } from './claudeRunner';
 import type { RunnerEvent, PermissionOutcome, RewindResult } from './claudeRunner';
 import { readMcpServersSync } from './mcpConfig';
+import { buildSdkHookOptions, readHooks } from './hooks';
 import type { PersistedSession } from './store';
 import type {
   SessionMeta,
@@ -184,6 +185,8 @@ export class Session {
       resumeSessionId: this.meta.claudeSessionId,
       // Read fresh each time a runner starts so MCP edits apply to new runs.
       mcpServers: readMcpServersSync(),
+      // Same story for hooks — config edits take effect on the next runner spin-up.
+      hooks: buildSdkHookOptions(readHooks()),
       onEvent: (event) => this.handleRunnerEvent(event),
       onError: (err) => {
         this.add({ kind: 'system', text: `Error: ${errMessage(err)}` });

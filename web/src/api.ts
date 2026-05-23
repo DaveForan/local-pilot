@@ -109,6 +109,10 @@ export const api = {
   mcp: () => req<McpServers>('GET', '/mcp'),
   saveMcp: (servers: McpServers) => req<{ ok: true }>('PUT', '/mcp', servers),
   mcpStatus: () => req<{ status: McpServerStatus[] | null }>('GET', '/mcp/status'),
+  hooks: () =>
+    req<{ events: string[]; config: Record<string, string> }>('GET', '/hooks'),
+  saveHooks: (config: Record<string, string>) =>
+    req<{ ok: true }>('PUT', '/hooks', config),
   pushVapid: () => req<{ publicKey: string }>('GET', '/push/vapid'),
   pushSubscribe: (sub: unknown) => req<{ ok: true }>('POST', '/push/subscribe', sub),
   pushUnsubscribe: (endpoint: string) =>
