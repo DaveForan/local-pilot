@@ -101,6 +101,7 @@ export type ClientMessage =
   | { t: 'input'; sessionId: string; text: string; images?: ChatImage[] }
   | { t: 'interrupt'; sessionId: string }
   | { t: 'delete'; sessionId: string }
+  | { t: 'rename'; sessionId: string; title: string }
   | { t: 'permission'; sessionId: string; requestId: string; decision: PermissionDecision }
   | { t: 'setMode'; sessionId: string; permissionMode: PermissionMode };
 

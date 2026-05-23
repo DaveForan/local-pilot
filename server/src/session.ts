@@ -79,6 +79,14 @@ export class Session {
     this.schedulePersist();
   }
 
+  rename(title: string): void {
+    const t = title.trim();
+    if (!t || t === this.meta.title) return;
+    this.meta.title = t;
+    this.hooks.onMeta(this.meta);
+    this.schedulePersist();
+  }
+
   resolvePermission(requestId: string, decision: PermissionDecision): void {
     const entry = this.pending.get(requestId);
     if (!entry) return;

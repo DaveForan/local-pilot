@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { usePilot, store } from '../store';
+import { useEscapeClose } from '../useModal';
 
 /** Modal for adding and removing saved prompts. */
 export function SnippetManager({ onClose }: { onClose: () => void }) {
+  useEscapeClose(onClose);
   const { snippets } = usePilot();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -21,7 +23,13 @@ export function SnippetManager({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Saved prompts"
+      >
         <h3>Saved prompts</h3>
 
         <div className="snippet-mgr-list">

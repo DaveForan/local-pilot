@@ -1,4 +1,5 @@
-import type { SessionMeta, PermissionMode } from '../protocol';
+import { useState } from 'react';
+import type { SessionMeta, SessionEvent, PermissionMode } from '../protocol';
 import { store } from '../store';
 import { relativeTime, shortPath } from '../format';
 import { STATUS } from './status';
@@ -17,8 +18,9 @@ interface Props {
   sessions: SessionMeta[];
   activeId: string | null;
   active: SessionMeta | null;
-  /** Resolved model for the active session (may be recovered from history). */
   activeModel: string | null;
+  /** Events of the active session — for cost/duration totals. */
+  activeEvents: SessionEvent[];
   connected: boolean;
   theme: Theme;
   onSelect: (id: string) => void;
@@ -28,17 +30,41 @@ interface Props {
   onClose: () => void;
 }
 
-/**
- * The single navigation surface — slides in from the hamburger. Holds the
- * session list, the current session's details + controls, and app nav, so
- * the chat view itself stays free of session chrome.
- */
+interface Totals {
+  durationMs: number;
+  costUsd: number;
+  turns: number;
+}
+
+function totalsFromEvents(events: SessionEvent[]): Totals {
+  let durationMs = 0;
+  let costUsd = 0;
+  let turns = 0;
+  for (const e of events) {
+    if (e.kind !== 'result') continue;
+    turns += 1;
+    if (typeof e.durationMs === 'number') durationMs += e.durationMs;
+    if (typeof e.costUsd === 'number') costUsd += e.costUsd;
+  }
+  return { durationMs, costUsd, turns };
+}
+
+function fmtDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const total = Math.round(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}m ${s}s`;
+}
+
 export function Drawer({
   open,
   sessions,
   activeId,
   active,
   activeModel,
+  activeEvents,
   connected,
   theme,
   onSelect,
@@ -47,6 +73,30 @@ export function Drawer({
   onToggleTheme,
   onClose,
 }: Props) {
+  const [filter, setFilter] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+
+  const filtered = filter.trim()
+    ? sessions.filter((s) => {
+        const q = filter.trim().toLowerCase();
+        return s.title.toLowerCase().includes(q) || s.cwd.toLowerCase().includes(q);
+      })
+    : sessions;
+
+  const totals = active ? totalsFromEvents(activeEvents) : null;
+
+  const startRename = (): void => {
+    if (!active) return;
+    setRenameValue(active.title);
+    setRenaming(true);
+  };
+  const commitRename = (): void => {
+    const next = renameValue.trim();
+    if (active && next && next !== active.title) store.rename(active.id, next);
+    setRenaming(false);
+  };
+
   return (
     <>
       {open && <div className="drawer-backdrop" onClick={onClose} />}
@@ -67,9 +117,19 @@ export function Drawer({
           </button>
 
           <div className="drawer-section-label">Sessions</div>
+          <input
+            className="drawer-filter"
+            type="search"
+            placeholder="Filter sessions…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
           <div className="session-list">
             {sessions.length === 0 && <div className="empty-hint">No sessions yet.</div>}
-            {sessions.map((s) => {
+            {sessions.length > 0 && filtered.length === 0 && (
+              <div className="empty-hint">No sessions match.</div>
+            )}
+            {filtered.map((s) => {
               const st = STATUS[s.status];
               return (
                 <button
@@ -102,7 +162,32 @@ export function Drawer({
           {active && (
             <div className="current-session">
               <div className="drawer-section-label">Current session</div>
-              <div className="cs-title">{active.title}</div>
+              {renaming ? (
+                <input
+                  className="cs-title-input"
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitRename();
+                    } else if (e.key === 'Escape') {
+                      setRenaming(false);
+                    }
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="cs-title"
+                  onClick={startRename}
+                  title="Tap to rename"
+                >
+                  {active.title}
+                </button>
+              )}
               <div className="cs-row">
                 <span>Status</span>
                 <span>{STATUS[active.status].label}</span>
@@ -117,6 +202,22 @@ export function Drawer({
                 <span>Model</span>
                 <span className="cs-mono">{activeModel ?? 'not yet started'}</span>
               </div>
+              {totals && totals.turns > 0 && (
+                <>
+                  <div className="cs-row">
+                    <span>Turns</span>
+                    <span>{totals.turns}</span>
+                  </div>
+                  <div className="cs-row">
+                    <span>Total time</span>
+                    <span className="cs-mono">{fmtDuration(totals.durationMs)}</span>
+                  </div>
+                  <div className="cs-row">
+                    <span>Total cost</span>
+                    <span className="cs-mono">${totals.costUsd.toFixed(4)}</span>
+                  </div>
+                </>
+              )}
               <label className="cs-field">
                 <span>Permission mode</span>
                 <select
@@ -130,6 +231,13 @@ export function Drawer({
                   ))}
                 </select>
               </label>
+              <a
+                className="btn btn-ghost drawer-export"
+                href={api.exportUrl(active.id)}
+                download={`${active.title || 'session'}.md`}
+              >
+                Export transcript
+              </a>
               <button
                 className="btn btn-ghost drawer-danger"
                 onClick={() => {

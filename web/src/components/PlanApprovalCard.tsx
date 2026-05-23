@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type { SessionEvent } from '../protocol';
 import { store } from '../store';
 import { clockTime } from '../format';
+import { Reply } from './Reply';
 
 type PermissionEvent = Extract<SessionEvent, { kind: 'permission' }>;
 
@@ -64,7 +63,7 @@ export function PlanApprovalCard({
       </div>
 
       <div className="plan-body md">
-        <Markdown remarkPlugins={[remarkGfm]}>{plan || '_(empty plan)_'}</Markdown>
+        <Reply>{plan || '_(empty plan)_'}</Reply>
       </div>
 
       {pending ? (

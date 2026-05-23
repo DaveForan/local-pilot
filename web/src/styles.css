@@ -355,10 +355,56 @@ textarea {
   border-top: 1px solid var(--line-soft);
 }
 .cs-title {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: 1px dashed transparent;
+  color: var(--text);
+  text-align: left;
   font-family: var(--serif);
   font-size: 16px;
   font-weight: 600;
-  padding: 2px 4px 6px;
+  padding: 2px 6px 6px;
+  cursor: text;
+}
+.cs-title:hover {
+  border-color: var(--line);
+  border-radius: 6px;
+}
+.cs-title-input {
+  display: block;
+  width: 100%;
+  background: var(--bg-3);
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  padding: 4px 7px;
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 600;
+  outline: none;
+  margin-bottom: 6px;
+}
+
+.drawer-filter {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 12px;
+  outline: none;
+  margin-bottom: 6px;
+}
+.drawer-filter:focus {
+  border-color: var(--accent);
+}
+
+.drawer-export {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  width: calc(100% - 8px);
+  margin: 4px 4px 0;
 }
 
 .cs-row {
@@ -1225,6 +1271,26 @@ textarea {
   color: var(--accent);
 }
 
+/* queue of messages typed while Claude is mid-turn */
+.composer-queue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: var(--accent-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* the composer highlights while a file is being dragged over it */
+.composer.drop-active {
+  outline: 2px dashed var(--accent);
+  outline-offset: -8px;
+}
+
 /* shown while Claude's reply is being read aloud; tap Stop to interrupt */
 .composer-reading {
   display: flex;
@@ -1463,6 +1529,185 @@ textarea {
     border-radius: 16px;
     animation: none;
   }
+}
+
+/* button that loads earlier turns from a virtualized timeline */
+.load-earlier {
+  align-self: center;
+  background: var(--bg-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.load-earlier:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* image lightbox */
+.lightbox-thumb {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: zoom-in;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.lightbox-thumb img {
+  display: block;
+  max-width: 100%;
+}
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  cursor: zoom-out;
+}
+.lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  cursor: default;
+  box-shadow: 0 12px 60px rgba(0, 0, 0, 0.6);
+}
+.lightbox-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+}
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* markdown code block with a copy button */
+.code-block {
+  position: relative;
+}
+.code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--bg-3);
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.code-copy:hover {
+  opacity: 1;
+  color: var(--text);
+}
+
+/* file edit / diff rendering in the activity log */
+.log-item.log-edit {
+  border-left: 2px solid var(--accent);
+}
+.file-diff-wrap {
+  border-top: 1px solid var(--line-soft);
+}
+.file-diff {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--code-bg);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre;
+  word-break: keep-all;
+  max-height: 480px;
+  overflow: auto;
+  color: var(--text-2);
+}
+.file-diff + .file-diff {
+  border-top: 1px solid var(--line-soft);
+}
+.diff-prefix {
+  display: inline-block;
+  width: 1.2em;
+  color: var(--text-3);
+}
+.diff-line {
+  white-space: pre-wrap;
+}
+.diff-add {
+  background: rgba(122, 196, 130, 0.18);
+  color: var(--text);
+}
+.diff-del {
+  background: rgba(207, 132, 117, 0.18);
+  color: var(--text);
+  text-decoration-line: none;
+}
+.diff-eq {
+  color: var(--text-3);
+}
+
+/* error boundary fallback */
+.error-boundary {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+  z-index: 100;
+}
+.error-boundary-card {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 22px;
+  max-width: 440px;
+  width: 100%;
+}
+.error-boundary-card h2 {
+  font-family: var(--serif);
+  margin-bottom: 10px;
+}
+.error-boundary-msg {
+  color: var(--text-2);
+  margin-bottom: 12px;
+}
+.error-boundary-stack {
+  background: var(--code-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-2);
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+/* active voice in the Settings → Voice tab */
+.sheet-item.sheet-item-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.sheet-item:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 /* screenshots and other images returned by tools, shown in the activity log */

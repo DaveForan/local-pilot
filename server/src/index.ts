@@ -53,7 +53,7 @@ async function main(): Promise<void> {
   // Login is public (it issues the session); everything else is gated.
   app.post('/api/login', handleLogin);
   app.post('/api/logout', handleLogout);
-  app.use('/api', requireAuth, createApiRouter());
+  app.use('/api', requireAuth, createApiRouter(manager));
 
   // Serve the built UI in production; in dev the Vite server handles it.
   if (existsSync(paths.webDist)) {

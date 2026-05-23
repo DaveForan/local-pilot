@@ -9,10 +9,12 @@ import type { McpServers } from './mcpConfig';
 import { vapidPublicKey, addSubscription, removeSubscription } from './push';
 import type { PushSubscriptionRecord } from './push';
 import { transcribe, whisperReady } from './whisper';
-import { synthesize, ttsReady } from './tts';
+import { synthesize, ttsReady, listVoices, setVoice } from './tts';
+import type { SessionManager } from './sessionManager';
+import { exportSessionMarkdown } from './sessionExport';
 
 /** REST endpoints for everything that is not the live session stream. */
-export function createApiRouter() {
+export function createApiRouter(manager: SessionManager) {
   const router = express.Router();
 
   router.get('/health', (_req, res) => {
@@ -88,9 +90,45 @@ export function createApiRouter() {
     },
   );
 
+  // --- session export ------------------------------------------------------
+  router.get('/sessions/:id/export', (req, res) => {
+    const session = manager.get(req.params.id);
+    if (!session) {
+      res.status(404).json({ error: 'unknown session' });
+      return;
+    }
+    const md = exportSessionMarkdown(session.meta, session.events);
+    const safeName = (session.meta.title || 'session').replace(/[^a-z0-9._-]+/gi, '_');
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}.md"`);
+    res.send(md);
+  });
+
   // --- text-to-speech (Piper) ----------------------------------------------
   router.get('/tts/status', (_req, res) => {
     res.json({ available: ttsReady() });
+  });
+
+  router.get('/tts/voices', async (_req, res) => {
+    try {
+      res.json(await listVoices());
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  router.post('/tts/voice', async (req, res) => {
+    const voice = typeof req.body?.voice === 'string' ? req.body.voice.trim() : '';
+    if (!voice) {
+      res.status(400).json({ error: 'voice is required' });
+      return;
+    }
+    try {
+      await setVoice(voice);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
   });
 
   router.post('/tts', async (req, res) => {

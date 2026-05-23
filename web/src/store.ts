@@ -194,6 +194,10 @@ class PilotStore {
     this.raw({ t: 'setMode', sessionId, permissionMode });
   }
 
+  rename(sessionId: string, title: string): void {
+    this.raw({ t: 'rename', sessionId, title });
+  }
+
   resolvePermission(sessionId: string, requestId: string, decision: PermissionDecision): void {
     this.raw({ t: 'permission', sessionId, requestId, decision });
   }

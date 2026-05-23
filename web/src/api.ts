@@ -87,6 +87,10 @@ export const api = {
   transcribeStatus: () => req<{ available: boolean }>('GET', '/transcribe/status'),
   transcribe: transcribeAudio,
   ttsStatus: () => req<{ available: boolean }>('GET', '/tts/status'),
+  listTtsVoices: () => req<{ name: string; active: boolean }[]>('GET', '/tts/voices'),
+  setTtsVoice: (voice: string) => req<{ ok: true }>('POST', '/tts/voice', { voice }),
+  /** Build the export URL — used as an href so the browser handles the download. */
+  exportUrl: (sessionId: string) => `/api/sessions/${encodeURIComponent(sessionId)}/export`,
   snippets: () => req<Snippet[]>('GET', '/snippets'),
   addSnippet: (title: string, body: string) => req<Snippet>('POST', '/snippets', { title, body }),
   deleteSnippet: (id: string) => req<{ ok: true }>('DELETE', `/snippets/${id}`),

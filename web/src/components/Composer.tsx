@@ -1,5 +1,13 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import type { SessionMeta } from '../protocol';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ClipboardEvent as ReactClipboardEvent,
+  type DragEvent as ReactDragEvent,
+} from 'react';
+import type { SessionMeta, ChatImage } from '../protocol';
 import { store } from '../store';
 import { api } from '../api';
 import { prepareImage, type PreparedImage } from '../image';
@@ -27,6 +35,17 @@ const TRANSCRIBE_TIMEOUT_MS = 30000;
 const TRANSCRIBE_MAX_FAILS = 3;
 /** Idle time in conversation mode before the watchdog re-opens the mic. */
 const WATCHDOG_MS = 3000;
+/** Composer textarea auto-grows up to this pixel cap. */
+const TEXTAREA_MAX_PX = 240;
+
+interface QueuedMessage {
+  text: string;
+  images: PreparedImage[];
+}
+
+function toChatImages(images: PreparedImage[]): ChatImage[] | undefined {
+  return images.length > 0 ? images.map((im) => ({ mediaType: im.mediaType, data: im.data })) : undefined;
+}
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   { session, voiceMode, onToggleVoiceMode },
@@ -34,20 +53,23 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 ) {
   const [text, setText] = useState('');
   const [images, setImages] = useState<PreparedImage[]>([]);
+  const [queue, setQueue] = useState<QueuedMessage[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [managerOpen, setManagerOpen] = useState(false);
   const [listening, setListening] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [pendingSend, setPendingSend] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const recordCancel = useRef<(() => void) | null>(null);
   const transcribeAbort = useRef<AbortController | null>(null);
   const transcribeFails = useRef(0);
   const graceTimer = useRef<number | null>(null);
   const submitRef = useRef<() => void>(() => {});
-  // Indirection so the recorder's callbacks always run the latest logic.
+  const drainGuard = useRef(false);
   const ctlRef = useRef<{
     onClip: (audio: Blob) => void;
     onNoSpeech: () => void;
@@ -56,7 +78,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
   const busy = session.status === 'running' || session.status === 'awaiting_permission';
   const ended = session.status === 'ended';
-  const canSend = !busy && !ended && (text.trim() !== '' || images.length > 0);
+  const hasDraft = text.trim() !== '' || images.length > 0;
+  const canSend = !ended && hasDraft;
 
   const stopVoice = (): void => {
     recordCancel.current?.();
@@ -78,20 +101,48 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     setPendingSend(false);
   };
 
+  const sendNow = (payload: QueuedMessage): void => {
+    store.sendInput(session.id, payload.text, toChatImages(payload.images));
+  };
+
+  /** Send the draft straight to Claude, or queue it if Claude is busy. */
   const submit = (): void => {
     if (!canSend) return;
-    stopVoice();
-    store.sendInput(
-      session.id,
-      text.trim(),
-      images.length > 0
-        ? images.map((im) => ({ mediaType: im.mediaType, data: im.data }))
-        : undefined,
-    );
+    const payload: QueuedMessage = { text: text.trim(), images: [...images] };
     setText('');
     setImages([]);
+    if (busy) {
+      // Claude is mid-turn — line this up; the drain effect sends it next.
+      setQueue((q) => [...q, payload]);
+      return;
+    }
+    stopVoice();
+    sendNow(payload);
   };
   submitRef.current = submit;
+
+  // Drain queued messages once Claude finishes the previous turn. Guarded so
+  // a state-update race can't double-send the same message.
+  useEffect(() => {
+    if (busy) {
+      drainGuard.current = false;
+      return;
+    }
+    if (ended || queue.length === 0 || drainGuard.current) return;
+    drainGuard.current = true;
+    const [next, ...rest] = queue;
+    setQueue(rest);
+    sendNow(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, ended, queue]);
+
+  // Auto-grow the textarea to fit content, up to a cap.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, TEXTAREA_MAX_PX)}px`;
+  }, [text]);
 
   // Record one spoken utterance, then transcribe it server-side.
   const beginUtterance = (): void => {
@@ -124,7 +175,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         transcribeFails.current = 0;
         const spoken = raw.trim();
         if (!spoken) {
-          beginUtterance(); // nothing recognised — keep listening
+          beginUtterance();
           return;
         }
         setText((cur) => (cur.trim() ? `${cur.trim()} ${spoken}` : spoken));
@@ -139,7 +190,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         if (transcribeAbort.current === abort) transcribeAbort.current = null;
         window.clearTimeout(timer);
         setTranscribing(false);
-        if (abort.signal.aborted) return; // intentional stop — don't retry
+        if (abort.signal.aborted) return;
         const msg = (e as Error).message ?? '';
         if (/not installed/i.test(msg)) {
           window.alert('Voice transcription is not installed on the server.');
@@ -154,29 +205,25 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           transcribeFails.current = 0;
           return;
         }
-        beginUtterance(); // transient failure — keep listening
+        beginUtterance();
       });
   };
   ctlRef.current.onNoSpeech = () => {
     recordCancel.current = null;
     setListening(false);
-    beginUtterance(); // nothing said — keep the mic ready
+    beginUtterance();
   };
   ctlRef.current.onError = () => {
     recordCancel.current = null;
     setListening(false);
   };
 
-  // Conversation mode reopens the mic once Claude has finished speaking.
   useImperativeHandle(ref, () => ({
     beginVoiceReply: () => {
       if (!busy && !ended) beginUtterance();
     },
   }));
 
-  // A permission prompt is on you — pause the conversation loop and any
-  // in-flight TTS so the request isn't drowned out. The natural reopen path
-  // (Timeline's reply-spoken callback) kicks in once Claude resumes.
   useEffect(() => {
     if (session.status === 'awaiting_permission') {
       stopVoice();
@@ -185,7 +232,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.status]);
 
-  // Entering conversation mode starts listening; leaving it stops everything.
   useEffect(() => {
     if (!voiceMode) {
       stopVoice();
@@ -205,11 +251,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceMode]);
 
-  // Mirror the global TTS speaking state so we can show the Reading strip.
   useEffect(() => subscribeSpeaking(setSpeaking), []);
 
-  // Watchdog: in conversation mode, if everything is idle for a beat and
-  // nothing's happening, the loop must have dropped — restart it.
   useEffect(() => {
     if (!voiceMode || ended || !recordingSupported()) return;
     const idle =
@@ -220,7 +263,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceMode, busy, ended, listening, transcribing, pendingSend, speaking]);
 
-  // Tidy up the recorder, timers and any in-flight TTS if the component goes away.
   useEffect(() => {
     return () => {
       recordCancel.current?.();
@@ -247,9 +289,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     if (title && title.trim()) void store.createSnippet(title.trim(), draft);
   };
 
-  const onFiles = async (files: FileList | null): Promise<void> => {
+  const ingestFiles = async (files: Iterable<File> | null | undefined): Promise<void> => {
     if (!files) return;
-    for (const file of Array.from(files)) {
+    for (const file of files) {
       if (!file.type.startsWith('image/')) continue;
       try {
         const prepared = await prepareImage(file);
@@ -260,11 +302,57 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     }
   };
 
+  const onPaste = (e: ReactClipboardEvent<HTMLTextAreaElement>): void => {
+    if (ended) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === 'file') {
+        const f = item.getAsFile();
+        if (f && f.type.startsWith('image/')) files.push(f);
+      }
+    }
+    if (files.length > 0) {
+      e.preventDefault();
+      void ingestFiles(files);
+    }
+  };
+
+  const onDragOver = (e: ReactDragEvent<HTMLDivElement>): void => {
+    if (ended) return;
+    if (e.dataTransfer?.types?.includes('Files')) {
+      e.preventDefault();
+      setDropActive(true);
+    }
+  };
+  const onDragLeave = (e: ReactDragEvent<HTMLDivElement>): void => {
+    // Leaving the composer entirely (not just a child) clears the highlight.
+    if (e.currentTarget === e.target) setDropActive(false);
+  };
+  const onDrop = (e: ReactDragEvent<HTMLDivElement>): void => {
+    setDropActive(false);
+    if (ended) return;
+    const fileList = e.dataTransfer?.files;
+    if (!fileList?.length) return;
+    e.preventDefault();
+    const images = Array.from(fileList).filter((f) => f.type.startsWith('image/'));
+    if (images.length) void ingestFiles(images);
+  };
+
   return (
-    <div className="composer">
+    <div
+      className={`composer ${dropActive ? 'drop-active' : ''}`}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       {busy && (
         <div
           className={`composer-busy ${session.status === 'awaiting_permission' ? 'needs-decision' : ''}`}
+          role="status"
+          aria-live="polite"
         >
           <span className="spinner" />
           <span>
@@ -297,6 +385,18 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         </span>
       </button>
 
+      {queue.length > 0 && (
+        <div className="composer-queue" role="status" aria-live="polite">
+          <span className="mic-dot" />
+          <span>
+            {queue.length} message{queue.length === 1 ? '' : 's'} queued — will send when Claude is free
+          </span>
+          <button className="pending-cancel" onClick={() => setQueue([])}>
+            Cancel
+          </button>
+        </div>
+      )}
+
       {images.length > 0 && (
         <div className="composer-attachments">
           {images.map((im, i) => (
@@ -315,7 +415,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       )}
 
       {pendingSend ? (
-        <div className="composer-pending">
+        <div className="composer-pending" role="status" aria-live="polite">
           <span className="mic-dot" />
           <span>Sending your reply…</span>
           <button
@@ -333,12 +433,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           </button>
         </div>
       ) : transcribing ? (
-        <div className="composer-listening">
+        <div className="composer-listening" role="status" aria-live="polite">
           <span className="spinner" />
           <span>Transcribing…</span>
         </div>
       ) : speaking ? (
-        <div className="composer-reading">
+        <div className="composer-reading" role="status" aria-live="polite">
           <span className="reading-dot" />
           <span>Reading reply…</span>
           <button
@@ -353,7 +453,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         </div>
       ) : (
         listening && (
-          <div className="composer-listening">
+          <div className="composer-listening" role="status" aria-live="polite">
             <span className="mic-dot" />
             <span>Listening… speak now</span>
           </div>
@@ -371,15 +471,19 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         </button>
 
         <textarea
+          ref={textareaRef}
           className="composer-input"
           placeholder={
             ended
               ? 'Session ended'
-              : 'Message Claude Code…  (Enter to send, Shift+Enter for newline)'
+              : busy
+                ? 'Type to queue — sends when Claude is free'
+                : 'Message Claude Code…  (Enter to send, Shift+Enter for newline)'
           }
           value={text}
           disabled={ended}
-          rows={2}
+          rows={1}
+          onPaste={onPaste}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -389,8 +493,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           }}
         />
 
-        <button className="btn btn-accent send-btn" onClick={submit} disabled={!canSend}>
-          Send
+        <button
+          className="btn btn-accent send-btn"
+          onClick={submit}
+          disabled={!canSend}
+          aria-label={busy ? 'Queue message' : 'Send message'}
+        >
+          {busy ? 'Queue' : 'Send'}
         </button>
       </div>
 
@@ -401,7 +510,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         multiple
         hidden
         onChange={(e) => {
-          void onFiles(e.target.files);
+          void ingestFiles(e.target.files);
           e.target.value = '';
         }}
       />

@@ -93,6 +93,10 @@ export class SessionManager {
     this.require(id).setMode(mode);
   }
 
+  rename(id: string, title: string): void {
+    this.require(id).rename(title);
+  }
+
   disposeAll(): void {
     for (const session of this.sessions.values()) session.dispose();
   }

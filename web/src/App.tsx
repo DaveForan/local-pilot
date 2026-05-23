@@ -48,8 +48,8 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(getTheme);
   const active = sessions.find((s) => s.id === activeId) ?? null;
-  const activeModel =
-    active?.model ?? (activeId ? modelFromEvents(events[activeId]) : null);
+  const activeEvents = activeId ? (events[activeId] ?? []) : [];
+  const activeModel = active?.model ?? modelFromEvents(activeEvents);
 
   // Has a session already been chosen this load? Prevents the restore effect
   // from overriding a push-notification deep-link or an explicit pick.
@@ -119,6 +119,7 @@ export function App() {
         activeId={activeId}
         active={active}
         activeModel={activeModel}
+        activeEvents={activeEvents}
         connected={connected}
         theme={theme}
         onSelect={(id) => {

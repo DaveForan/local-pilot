@@ -3,12 +3,15 @@ import { api } from '../api';
 import type { DirListing } from '../api';
 import type { PermissionMode } from '../protocol';
 import { store } from '../store';
+import { useEscapeClose } from '../useModal';
 
 export function NewSessionDialog({ onClose }: { onClose: () => void }) {
+  useEscapeClose(onClose);
   const [listing, setListing] = useState<DirListing | null>(null);
   const [title, setTitle] = useState('');
   const [mode, setMode] = useState<PermissionMode>('default');
-  const [model, setModel] = useState('default');
+  // Always an explicit, deliberate model — no "default" pass-through.
+  const [model, setModel] = useState('claude-opus-4-7');
   const [err, setErr] = useState<string | null>(null);
 
   const browse = (path?: string): void => {
@@ -29,20 +32,26 @@ export function NewSessionDialog({ onClose }: { onClose: () => void }) {
       cwd: listing.path,
       title: title.trim() || undefined,
       permissionMode: mode,
-      // 'default' means: don't pin a model — use the Claude Code default.
-      model: model === 'default' ? null : model,
+      model,
     });
     onClose();
   };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="New session"
+      >
         <h3>New session</h3>
 
         <label className="field">
           <span>Title (optional)</span>
           <input
+            autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. orbweaver bugfix"
@@ -52,7 +61,6 @@ export function NewSessionDialog({ onClose }: { onClose: () => void }) {
         <label className="field">
           <span>Model</span>
           <select value={model} onChange={(e) => setModel(e.target.value)}>
-            <option value="default">Default — your Claude Code setting</option>
             <option value="claude-opus-4-7">Claude Opus 4.7 — most capable</option>
             <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — balanced</option>
             <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fastest</option>

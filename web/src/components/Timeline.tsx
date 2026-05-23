@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type { SessionEvent, SessionStatus, ChatImage } from '../protocol';
 import { PermissionCard } from './PermissionCard';
 import { ActivityLog } from './ActivityLog';
 import { TodoCard } from './TodoCard';
+import { Reply } from './Reply';
+import { LightboxImage } from './ImageLightbox';
 import { speak, stopSpeaking, speechOutputSupported } from '../speech';
 
 type ActivityEvent = Extract<
@@ -102,13 +102,22 @@ interface Props {
   onReplySpoken: () => void;
 }
 
+const INITIAL_VISIBLE_TURNS = 50;
+const MORE_PER_CLICK = 50;
+
 export function Timeline({ sessionId, events, status, voiceMode, onReplySpoken }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
   const [logKey, setLogKey] = useState<number | null>(null);
+  const [visible, setVisible] = useState(INITIAL_VISIBLE_TURNS);
   const spokenRef = useRef<number>(-1);
   const turns = useMemo(() => groupTurns(events), [events]);
   // Look the open turn up by key each render so the log keeps updating live.
   const logTurn = logKey == null ? null : turns.find((t) => t.key === logKey) ?? null;
+
+  // For long sessions, only keep the most recent N turns in the DOM. The
+  // "Load earlier" header expands the window on demand.
+  const hiddenCount = Math.max(0, turns.length - visible);
+  const shownTurns = hiddenCount > 0 ? turns.slice(hiddenCount) : turns;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -142,19 +151,32 @@ export function Timeline({ sessionId, events, status, voiceMode, onReplySpoken }
       {events.length === 0 && (
         <div className="empty-hint center">Send a message to start the session.</div>
       )}
-      {turns.map((turn, i) => (
-        <TurnView
-          key={turn.key}
-          sessionId={sessionId}
-          turn={turn}
-          running={
-            i === turns.length - 1 &&
-            !turn.result &&
-            (status === 'running' || status === 'awaiting_permission')
-          }
-          onOpenLog={() => setLogKey(turn.key)}
-        />
-      ))}
+      {hiddenCount > 0 && (
+        <button
+          className="load-earlier"
+          onClick={() => setVisible((v) => v + MORE_PER_CLICK)}
+        >
+          Load {Math.min(hiddenCount, MORE_PER_CLICK)} earlier
+          {hiddenCount > MORE_PER_CLICK ? ` of ${hiddenCount}` : ''}
+        </button>
+      )}
+      {shownTurns.map((turn) => {
+        const realIdx = hiddenCount + shownTurns.indexOf(turn);
+        const isLast = realIdx === turns.length - 1;
+        return (
+          <TurnView
+            key={turn.key}
+            sessionId={sessionId}
+            turn={turn}
+            running={
+              isLast &&
+              !turn.result &&
+              (status === 'running' || status === 'awaiting_permission')
+            }
+            onOpenLog={() => setLogKey(turn.key)}
+          />
+        );
+      })}
       <div ref={endRef} />
       {logTurn && <ActivityLog turn={logTurn} onClose={() => setLogKey(null)} />}
     </div>
@@ -185,7 +207,7 @@ function TurnView({
             {turn.userImages.length > 0 && (
               <div className="bubble-images">
                 {turn.userImages.map((im, i) => (
-                  <img
+                  <LightboxImage
                     key={i}
                     src={`data:${im.mediaType};base64,${im.data}`}
                     alt="attachment"
@@ -203,6 +225,7 @@ function TurnView({
           <ActivityBlock
             running={running}
             toolCount={toolCount}
+            currentTool={running ? latestToolName(turn.activity) : null}
             durationMs={turn.result?.durationMs ?? null}
             costUsd={turn.result?.costUsd ?? null}
             openable={turn.activity.length > 0}
@@ -220,13 +243,29 @@ function TurnView({
       {responseText && (
         <div className="ev ev-assistant">
           <div className="md">
-            <Markdown remarkPlugins={[remarkGfm]}>{responseText}</Markdown>
+            <Reply>{responseText}</Reply>
           </div>
           <SpeakButton text={responseText} />
         </div>
       )}
     </>
   );
+}
+
+/** "mcp__server__tool" → "server · tool" for the activity-block indicator. */
+function prettyToolName(name: string): string {
+  if (!name.startsWith('mcp__')) return name;
+  const parts = name.split('__');
+  return parts.length >= 3 ? `${parts[1]} · ${parts.slice(2).join('__')}` : name;
+}
+
+/** Most recent tool name in the turn, for the "Running X…" indicator. */
+function latestToolName(activity: ActivityEvent[]): string | null {
+  for (let i = activity.length - 1; i >= 0; i--) {
+    const e = activity[i];
+    if (e.kind === 'tool_use') return prettyToolName(e.name);
+  }
+  return null;
 }
 
 /** Reads a reply aloud — tap to play, tap again to stop. */
@@ -257,6 +296,7 @@ function SpeakButton({ text }: { text: string }) {
 function ActivityBlock({
   running,
   toolCount,
+  currentTool,
   durationMs,
   costUsd,
   openable,
@@ -264,13 +304,16 @@ function ActivityBlock({
 }: {
   running: boolean;
   toolCount: number;
+  currentTool: string | null;
   durationMs: number | null;
   costUsd: number | null;
   openable: boolean;
   onOpen: () => void;
 }) {
   const label = running
-    ? 'Claude is working…'
+    ? currentTool
+      ? `Running ${currentTool}…`
+      : 'Claude is working…'
     : toolCount > 0
       ? `Claude finished — used ${toolCount} command${toolCount === 1 ? '' : 's'}`
       : 'Claude finished';
