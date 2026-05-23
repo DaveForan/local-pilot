@@ -104,7 +104,6 @@ export function Timeline({ sessionId, events, status, voiceMode, onReplySpoken }
     const last = turns[turns.length - 1];
     if (!last?.result) return;
     const text = last.texts.join('\n\n').trim();
-    if (!text) return;
     if (spokenRef.current === -1) {
       // Just switched on — arm without re-reading the reply already shown.
       spokenRef.current = last.key;
@@ -112,7 +111,10 @@ export function Timeline({ sessionId, events, status, voiceMode, onReplySpoken }
     }
     if (last.key > spokenRef.current) {
       spokenRef.current = last.key;
-      speak(text, onReplySpoken);
+      // If the turn had no spoken reply (tool-only completion), still hand
+      // back to the conversation loop so the mic reopens.
+      if (text) speak(text, onReplySpoken);
+      else onReplySpoken();
     }
   }, [turns, voiceMode, onReplySpoken]);
 

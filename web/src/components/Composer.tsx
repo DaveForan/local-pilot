@@ -4,6 +4,7 @@ import { store } from '../store';
 import { api } from '../api';
 import { prepareImage, type PreparedImage } from '../image';
 import { recordUtterance, recordingSupported } from '../audio';
+import { stopSpeaking } from '../speech';
 import { AddSheet } from './AddSheet';
 import { SnippetManager } from './SnippetManager';
 
@@ -137,6 +138,17 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     },
   }));
 
+  // A permission prompt is on you — pause the conversation loop and any
+  // in-flight TTS so the request isn't drowned out. The natural reopen path
+  // (Timeline's reply-spoken callback) kicks in once Claude resumes.
+  useEffect(() => {
+    if (session.status === 'awaiting_permission') {
+      stopVoice();
+      stopSpeaking();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.status]);
+
   // Entering conversation mode starts listening; leaving it stops everything.
   useEffect(() => {
     if (!voiceMode) {
@@ -192,11 +204,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   return (
     <div className="composer">
       {busy && (
-        <div className="composer-busy">
+        <div
+          className={`composer-busy ${session.status === 'awaiting_permission' ? 'needs-decision' : ''}`}
+        >
           <span className="spinner" />
           <span>
             {session.status === 'awaiting_permission'
-              ? 'Waiting for your permission decision above'
+              ? '⚠ Tap Allow or Deny on the request above'
               : 'Claude is working'}
           </span>
           <button className="btn btn-danger btn-sm" onClick={() => store.interrupt(session.id)}>

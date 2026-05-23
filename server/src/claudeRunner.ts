@@ -251,6 +251,16 @@ export class ClaudeRunner {
         });
         break;
       }
+      default: {
+        // Streaming token deltas are already captured via the 'assistant'
+        // message — they're noisy and expected. Anything else (including any
+        // future elicitation/MCP-elicitation messages) we log so they're
+        // diagnosable instead of silently dropped.
+        if (msg.type && msg.type !== 'stream_event') {
+          console.warn(`[runner] unhandled SDK message type: ${msg.type}`);
+        }
+        break;
+      }
     }
   }
 

@@ -83,16 +83,30 @@ export class Session {
     const entry = this.pending.get(requestId);
     if (!entry) return;
     this.pending.delete(requestId);
-    entry.event.status = decision.behavior === 'allow' ? 'allowed' : 'denied';
-    entry.event.resolution =
-      decision.behavior === 'allow' ? 'Allowed' : `Denied — ${decision.message}`;
+
+    if (decision.behavior === 'allow') {
+      entry.event.status = 'allowed';
+      entry.event.resolution = 'Allowed';
+    } else if (decision.behavior === 'answer') {
+      // The user answered an elicitation (e.g. AskUserQuestion).
+      entry.event.status = 'allowed';
+      entry.event.resolution = 'Answered';
+    } else {
+      entry.event.status = 'denied';
+      entry.event.resolution = `Denied — ${decision.message}`;
+    }
     this.touch(entry.event);
     this.setStatus('running');
-    entry.resolve(
-      decision.behavior === 'allow'
-        ? { behavior: 'allow', updatedInput: decision.updatedInput }
-        : { behavior: 'deny', message: decision.message },
-    );
+
+    // The SDK only understands allow/deny. For 'answer', we deliver the
+    // structured response as the tool result via deny.message.
+    if (decision.behavior === 'allow') {
+      entry.resolve({ behavior: 'allow', updatedInput: decision.updatedInput });
+    } else if (decision.behavior === 'answer') {
+      entry.resolve({ behavior: 'deny', message: decision.data });
+    } else {
+      entry.resolve({ behavior: 'deny', message: decision.message });
+    }
   }
 
   dispose(): void {

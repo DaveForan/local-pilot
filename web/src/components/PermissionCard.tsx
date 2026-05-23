@@ -1,12 +1,32 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SessionEvent } from '../protocol';
 import { store } from '../store';
 import { clockTime, formatValue } from '../format';
+import { AskUserQuestionCard } from './AskUserQuestionCard';
+import { PlanApprovalCard } from './PlanApprovalCard';
 
 type PermissionEvent = Extract<SessionEvent, { kind: 'permission' }>;
 
-/** An interactive permission prompt — kept inline since the user must act. */
+/** Routes each elicitation to a rich card; falls back to a generic
+ *  allow/deny permission prompt for ordinary tool calls. */
 export function PermissionCard({
+  sessionId,
+  event,
+}: {
+  sessionId: string;
+  event: PermissionEvent;
+}) {
+  if (event.toolName === 'AskUserQuestion') {
+    return <AskUserQuestionCard sessionId={sessionId} event={event} />;
+  }
+  if (event.toolName === 'ExitPlanMode') {
+    return <PlanApprovalCard sessionId={sessionId} event={event} />;
+  }
+  return <GenericPermissionCard sessionId={sessionId} event={event} />;
+}
+
+/** The original allow / deny / allow-with-edits card for ordinary tool calls. */
+function GenericPermissionCard({
   sessionId,
   event,
 }: {
@@ -17,6 +37,11 @@ export function PermissionCard({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(() => formatValue(event.input));
   const [jsonErr, setJsonErr] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (pending) cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const allow = (updatedInput?: Record<string, unknown>): void => {
     store.resolvePermission(sessionId, event.requestId, { behavior: 'allow', updatedInput });
@@ -49,7 +74,10 @@ export function PermissionCard({
     suggestions != null && (Array.isArray(suggestions) ? suggestions.length > 0 : true);
 
   return (
-    <div className={`ev ev-permission ${event.status} ${pending ? 'pending-pulse' : ''}`}>
+    <div
+      ref={cardRef}
+      className={`ev ev-permission ${event.status} ${pending ? 'pending-pulse' : ''}`}
+    >
       <div className="perm-head">
         <span className="perm-badge">Permission</span>
         <span className="perm-tool">{event.toolName}</span>

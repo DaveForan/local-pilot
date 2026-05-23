@@ -80,7 +80,11 @@ export interface PermissionRequest {
 
 export type PermissionDecision =
   | { behavior: 'allow'; updatedInput?: Record<string, unknown> }
-  | { behavior: 'deny'; message: string };
+  | { behavior: 'deny'; message: string }
+  // `answer` is used for elicitation tools (AskUserQuestion, ExitPlanMode):
+  // the user provided a structured response. The server passes `data` back
+  // to the SDK as the tool result so Claude can continue.
+  | { behavior: 'answer'; data: string };
 
 // ---- client -> server ------------------------------------------------------
 export type ClientMessage =
