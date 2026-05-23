@@ -2321,6 +2321,35 @@ textarea {
   color: var(--accent);
 }
 
+.security-section-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.security-new-token {
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  margin-top: 8px;
+}
+.security-token-label {
+  font-size: 11px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+.security-token-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  word-break: break-all;
+  user-select: all;
+  background: var(--bg-1);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
 .plugin-add {
   display: flex;
   gap: 8px;

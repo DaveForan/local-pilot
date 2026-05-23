@@ -157,3 +157,27 @@ export function handleLogout(req: Request, res: Response): void {
   res.clearCookie(COOKIE_NAME, { path: '/' });
   res.json({ ok: true });
 }
+
+/**
+ * POST /api/auth/rotate-token — mint a new access token, persist it,
+ * invalidate every issued cookie. The new token is returned ONCE in the
+ * response body so the user can copy it for other devices. The current
+ * caller's cookie is preserved so the UI doesn't kick them out.
+ */
+export function handleRotateToken(req: Request, res: Response): void {
+  const next = randomBytes(24).toString('base64url');
+  token = next;
+  try {
+    writeFileSync(paths.token, token + '\n', { mode: 0o600 });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to persist token: ${String(err)}` });
+    return;
+  }
+  // Invalidate every issued session cookie — *except* the caller's, so the
+  // person who just rotated isn't logged out before they see the new token.
+  const keep = parseCookies(req.headers.cookie)[COOKIE_NAME];
+  for (const id of [...sessions.keys()]) {
+    if (id !== keep) sessions.delete(id);
+  }
+  res.json({ ok: true, token });
+}

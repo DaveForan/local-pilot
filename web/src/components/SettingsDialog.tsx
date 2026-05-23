@@ -3,10 +3,11 @@ import { api, type SkillInfo } from '../api';
 import { McpEditor } from './McpEditor';
 import { HooksEditor } from './HooksEditor';
 import { PluginsEditor } from './PluginsEditor';
+import { SecurityPanel } from './SecurityPanel';
 import { pushStatus, enablePush, disablePush, type PushStatus } from '../push';
 import { useEscapeClose } from '../useModal';
 
-type Tab = 'mcp' | 'hooks' | 'plugins' | 'skills' | 'voice' | 'push';
+type Tab = 'mcp' | 'hooks' | 'plugins' | 'skills' | 'voice' | 'push' | 'security';
 
 /** Settings modal — in-UI configuration of MCP servers and skills. */
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
@@ -66,11 +67,18 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           >
             Notifications
           </button>
+          <button
+            className={`tab ${tab === 'security' ? 'on' : ''}`}
+            onClick={() => setTab('security')}
+          >
+            Security
+          </button>
         </div>
 
         {tab === 'mcp' && <McpEditor />}
         {tab === 'hooks' && <HooksEditor />}
         {tab === 'plugins' && <PluginsEditor />}
+        {tab === 'security' && <SecurityPanel />}
         {tab === 'skills' && <SkillsList />}
         {tab === 'voice' && <VoicePanel />}
         {tab === 'push' && <NotificationsPanel />}

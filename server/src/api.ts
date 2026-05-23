@@ -17,6 +17,7 @@ import { synthesize, ttsReady, listVoices, setVoice } from './tts';
 import type { SessionManager } from './sessionManager';
 import { exportSessionMarkdown } from './sessionExport';
 import { paths } from './config';
+import { handleRotateToken } from './auth';
 
 /** REST endpoints for everything that is not the live session stream. */
 export function createApiRouter(manager: SessionManager) {
@@ -225,6 +226,11 @@ export function createApiRouter(manager: SessionManager) {
       res.status(500).json({ error: String(err) });
     }
   });
+
+  // --- token rotation ------------------------------------------------------
+  // Issues a new access token and invalidates every other session cookie.
+  // The new token is returned ONCE in the body for the user to copy.
+  router.post('/auth/rotate-token', handleRotateToken);
 
   // --- crash log -----------------------------------------------------------
   // The web ErrorBoundary POSTs here when render crashes. Append-only;

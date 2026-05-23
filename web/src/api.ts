@@ -116,6 +116,7 @@ export const api = {
   plugins: () => req<Array<{ type: 'local'; path: string }>>('GET', '/plugins'),
   savePlugins: (plugins: Array<{ type: 'local'; path: string }>) =>
     req<{ ok: true }>('PUT', '/plugins', plugins),
+  rotateToken: () => req<{ ok: true; token: string }>('POST', '/auth/rotate-token'),
   pushVapid: () => req<{ publicKey: string }>('GET', '/push/vapid'),
   pushSubscribe: (sub: unknown) => req<{ ok: true }>('POST', '/push/subscribe', sub),
   pushUnsubscribe: (endpoint: string) =>
