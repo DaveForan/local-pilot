@@ -198,6 +198,11 @@ function TurnView({
   const hasThinking = turn.activity.some((e) => e.kind === 'thinking');
   const showActivity = running || toolCount > 0 || hasThinking;
   const responseText = turn.texts.join('\n\n').trim();
+  // Surface any images tools produced (screenshots, image Reads, generated
+  // images) inline — otherwise they'd be buried in the activity-log modal.
+  const turnImages: ChatImage[] = turn.activity.flatMap((e) =>
+    e.kind === 'tool_result' && e.images ? e.images : [],
+  );
 
   return (
     <>
@@ -232,6 +237,20 @@ function TurnView({
             openable={turn.activity.length > 0}
             onOpen={onOpenLog}
           />
+        </div>
+      )}
+
+      {turnImages.length > 0 && (
+        <div className="ev ev-tool-images">
+          <div className="tool-image-strip" aria-label="Images produced this turn">
+            {turnImages.map((im, i) => (
+              <LightboxImage
+                key={i}
+                src={`data:${im.mediaType};base64,${im.data}`}
+                alt="tool image"
+              />
+            ))}
+          </div>
         </div>
       )}
 
