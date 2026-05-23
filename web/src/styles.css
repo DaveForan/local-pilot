@@ -65,6 +65,9 @@ html,
 body,
 #root {
   height: 100%;
+  /* Use the dynamic viewport unit on browsers that support it so the
+   * iOS keyboard / Android URL bar don't shove the composer offscreen. */
+  height: 100dvh;
 }
 
 body {
@@ -74,6 +77,9 @@ body {
   font-size: 14px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  /* Disable horizontal swipe-to-go-back on iOS so the drawer's pan gesture
+   * (when we add one) won't fight the OS. Vertical pan stays normal. */
+  overscroll-behavior-x: contain;
 }
 
 button,
@@ -90,6 +96,9 @@ textarea {
   display: flex;
   flex-direction: column;
   height: 100%;
+  /* Reserve room for the iOS notch / Android status bar at the top —
+   * the floating hamburger uses this so it doesn't collide with the camera. */
+  padding-top: env(safe-area-inset-top);
 }
 
 /* The only top-level chrome: a hamburger floating over the chat. */
@@ -147,6 +156,9 @@ textarea {
   box-shadow: var(--shadow);
   transform: translateX(-100%);
   transition: transform 0.22s ease;
+  /* Honor the iOS notch + home indicator while the drawer is open. */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 .drawer.open {
   transform: translateX(0);
@@ -1282,7 +1294,8 @@ textarea {
 .composer {
   border-top: 1px solid var(--line);
   background: var(--bg-1);
-  padding: 12px 18px;
+  /* Lift the composer above the iOS home indicator. */
+  padding: 12px 18px max(12px, env(safe-area-inset-bottom)) 18px;
   flex-shrink: 0;
   position: relative;
 }
