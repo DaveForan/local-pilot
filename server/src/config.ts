@@ -20,6 +20,8 @@ export const paths = {
   mcp: path.join(DATA_DIR, 'mcp.json'),
   // User-defined shell commands wired into the SDK's hook events.
   hooks: path.join(DATA_DIR, 'hooks.json'),
+  // Local plugin paths loaded into every session (SdkPluginConfig[]).
+  plugins: path.join(DATA_DIR, 'plugins.json'),
   // Web-push: generated VAPID keypair and the browser subscriptions.
   vapid: path.join(DATA_DIR, 'vapid.json'),
   pushSubs: path.join(DATA_DIR, 'push-subscriptions.json'),

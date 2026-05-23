@@ -133,6 +133,8 @@ export interface RunnerOptions {
   mcpServers: Record<string, unknown>;
   /** SDK-shaped hooks option, or null when the user has none configured. */
   hooks: Record<string, unknown> | null;
+  /** Local plugin entries to load alongside MCP servers and hooks. */
+  plugins: Array<{ type: 'local'; path: string }>;
   onEvent: (event: RunnerEvent) => void;
   onError: (err: unknown) => void;
   onEnd: () => void;
@@ -247,6 +249,7 @@ export class ClaudeRunner {
       options.mcpServers = this.opts.mcpServers;
     }
     if (this.opts.hooks) options.hooks = this.opts.hooks;
+    if (this.opts.plugins.length > 0) options.plugins = this.opts.plugins;
 
     try {
       this.generator = runQuery({ prompt: this.queue, options });

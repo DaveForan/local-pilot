@@ -113,6 +113,9 @@ export const api = {
     req<{ events: string[]; config: Record<string, string> }>('GET', '/hooks'),
   saveHooks: (config: Record<string, string>) =>
     req<{ ok: true }>('PUT', '/hooks', config),
+  plugins: () => req<Array<{ type: 'local'; path: string }>>('GET', '/plugins'),
+  savePlugins: (plugins: Array<{ type: 'local'; path: string }>) =>
+    req<{ ok: true }>('PUT', '/plugins', plugins),
   pushVapid: () => req<{ publicKey: string }>('GET', '/push/vapid'),
   pushSubscribe: (sub: unknown) => req<{ ok: true }>('POST', '/push/subscribe', sub),
   pushUnsubscribe: (endpoint: string) =>

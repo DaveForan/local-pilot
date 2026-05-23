@@ -2180,6 +2180,25 @@ textarea {
   color: var(--accent);
 }
 
+.plugin-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.plugin-add-input {
+  flex: 1;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+}
+.plugin-add-input:focus {
+  border-color: var(--accent);
+}
+
 .mcp-form h4 {
   margin: 0 0 14px;
   font-family: var(--serif);

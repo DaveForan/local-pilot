@@ -8,6 +8,8 @@ import { readMcpServers, writeMcpServers } from './mcpConfig';
 import type { McpServers } from './mcpConfig';
 import { readHooks, writeHooks, HOOK_EVENT_NAMES } from './hooks';
 import type { HookConfig, HookEventName } from './hooks';
+import { readPlugins, writePlugins } from './plugins';
+import type { PluginEntry } from './plugins';
 import { vapidPublicKey, addSubscription, removeSubscription } from './push';
 import type { PushSubscriptionRecord } from './push';
 import { transcribe, whisperReady } from './whisper';
@@ -217,6 +219,23 @@ export function createApiRouter(manager: SessionManager) {
         if (typeof cmd === 'string' && cmd.trim()) clean[name as HookEventName] = cmd;
       }
       writeHooks(clean);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // --- local plugins -------------------------------------------------------
+  router.get('/plugins', (_req, res) => {
+    res.json(readPlugins());
+  });
+  router.put('/plugins', (req, res) => {
+    try {
+      const body = Array.isArray(req.body) ? (req.body as unknown[]) : [];
+      const clean: PluginEntry[] = body
+        .filter((p): p is { path: string } => !!p && typeof (p as any).path === 'string')
+        .map((p) => ({ type: 'local', path: String(p.path) }));
+      writePlugins(clean);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: String(err) });

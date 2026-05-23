@@ -3,6 +3,7 @@ import { ClaudeRunner } from './claudeRunner';
 import type { RunnerEvent, PermissionOutcome, RewindResult } from './claudeRunner';
 import { readMcpServersSync } from './mcpConfig';
 import { buildSdkHookOptions, readHooks } from './hooks';
+import { readPlugins } from './plugins';
 import type { PersistedSession } from './store';
 import type {
   SessionMeta,
@@ -187,6 +188,7 @@ export class Session {
       mcpServers: readMcpServersSync(),
       // Same story for hooks — config edits take effect on the next runner spin-up.
       hooks: buildSdkHookOptions(readHooks()),
+      plugins: readPlugins(),
       onEvent: (event) => this.handleRunnerEvent(event),
       onError: (err) => {
         this.add({ kind: 'system', text: `Error: ${errMessage(err)}` });
