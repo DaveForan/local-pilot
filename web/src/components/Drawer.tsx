@@ -22,7 +22,6 @@ interface Props {
   activeModel: string | null;
   /** Events of the active session — for cost/duration totals. */
   activeEvents: SessionEvent[];
-  connected: boolean;
   /** Fine-grained WS state — used to differentiate retry / unreachable / auth. */
   conn: ConnectionState;
   retryCount: number;
@@ -152,7 +151,6 @@ export function Drawer({
   active,
   activeModel,
   activeEvents,
-  connected,
   conn,
   retryCount,
   theme,
