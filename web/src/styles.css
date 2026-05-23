@@ -120,6 +120,7 @@ textarea {
   min-width: 0;
   min-height: 0;
   display: flex;
+  position: relative;
 }
 
 /* ===== drawer ============================================================ */
@@ -535,6 +536,55 @@ textarea {
   max-width: 80%;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* in-session find bar — floats above the timeline, summoned with Ctrl-F */
+.search-bar {
+  position: absolute;
+  top: 10px;
+  right: 16px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.35);
+}
+.search-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  min-width: 200px;
+  color: var(--text-1);
+}
+.search-count {
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  min-width: 60px;
+  text-align: right;
+}
+.search-nav {
+  font-size: 13px;
+}
+
+/* transient highlight on the turn containing the current match */
+.search-hit {
+  animation: search-hit-flash 1.4s ease-out;
+}
+@keyframes search-hit-flash {
+  0%,
+  30% {
+    background-color: rgba(240, 200, 0, 0.22);
+    border-radius: 12px;
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 
 /* "Rewind files to here" — small ghost button under each user bubble,

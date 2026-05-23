@@ -236,7 +236,7 @@ function TurnView({
   return (
     <>
       {turn.userText != null && (
-        <div className="ev ev-user">
+        <div className="ev ev-user" data-turn-key={turn.key}>
           <div className="bubble">
             {turn.userImages.length > 0 && (
               <div className="bubble-images">

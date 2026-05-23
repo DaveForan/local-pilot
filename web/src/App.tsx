@@ -5,6 +5,7 @@ import { Drawer } from './components/Drawer';
 import { ChatPane } from './components/ChatPane';
 import { NewSessionDialog } from './components/NewSessionDialog';
 import { SettingsDialog } from './components/SettingsDialog';
+import { SearchBar } from './components/SearchBar';
 import { getTheme, applyTheme, type Theme } from './theme';
 
 /** Recover the resolved model from a session's history (the SDK reports it
@@ -46,7 +47,24 @@ export function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(getTheme);
+
+  // Ctrl-F / Cmd-F opens the in-session find bar. Don't grab it when the
+  // user is in a regular input/textarea elsewhere (e.g. composer) — only
+  // when nothing has focus that wants the keystroke for itself.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        // Only if there's a session to search.
+        if (!activeId) return;
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeId]);
   const active = sessions.find((s) => s.id === activeId) ?? null;
   const activeEvents = activeId ? (events[activeId] ?? []) : [];
   const activeModel = active?.model ?? modelFromEvents(activeEvents);
@@ -110,6 +128,9 @@ export function App() {
       </button>
 
       <main className="main">
+        {searchOpen && activeId && (
+          <SearchBar events={activeEvents} onClose={() => setSearchOpen(false)} />
+        )}
         <ChatPane session={active} />
       </main>
 
