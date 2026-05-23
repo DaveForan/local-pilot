@@ -22,6 +22,8 @@ export interface SessionMeta {
   eventCount: number;
   /** Underlying Claude Code session id — used to resume after a server restart. */
   claudeSessionId: string | null;
+  /** Slash commands the SDK exposes for this session (populated after init). */
+  slashCommands?: string[];
 }
 
 /** A base64-encoded image — attached by the user, or produced by a tool. */

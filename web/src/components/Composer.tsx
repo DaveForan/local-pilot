@@ -37,6 +37,23 @@ const TRANSCRIBE_MAX_FAILS = 3;
 const WATCHDOG_MS = 3000;
 /** Composer textarea auto-grows up to this pixel cap. */
 const TEXTAREA_MAX_PX = 240;
+/** Max slash-command suggestions to show at once. */
+const SLASH_SUGGEST_MAX = 8;
+
+/** Pick the slash-command suggestion list given the current input + available cmds.
+ *  Returns null if the input isn't a slash-command-in-progress. */
+function slashSuggestions(text: string, commands: string[] | undefined): string[] | null {
+  if (!commands || commands.length === 0) return null;
+  // Only when the input *starts* with a single "/" and has no spaces or newlines
+  // yet — once arguments begin, get out of the way.
+  if (!text.startsWith('/') || text.startsWith('//')) return null;
+  if (/\s/.test(text)) return null;
+  const q = text.slice(1).toLowerCase();
+  const matches = commands
+    .filter((c) => c.toLowerCase().startsWith(q))
+    .slice(0, SLASH_SUGGEST_MAX);
+  return matches.length > 0 ? matches : null;
+}
 
 interface QueuedMessage {
   text: string;
@@ -61,6 +78,19 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [pendingSend, setPendingSend] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [dropActive, setDropActive] = useState(false);
+  const [slashIdx, setSlashIdx] = useState(0);
+
+  const slashList = slashSuggestions(text, session.slashCommands);
+  // Clamp the highlight whenever the filtered list shrinks.
+  useEffect(() => {
+    if (slashList && slashIdx >= slashList.length) setSlashIdx(0);
+  }, [slashList, slashIdx]);
+
+  const acceptSlash = (name: string): void => {
+    setText(`/${name} `);
+    setSlashIdx(0);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -486,12 +516,56 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           onPaste={onPaste}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
+            if (slashList) {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSlashIdx((i) => (i + 1) % slashList.length);
+                return;
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSlashIdx((i) => (i - 1 + slashList.length) % slashList.length);
+                return;
+              }
+              if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+                e.preventDefault();
+                acceptSlash(slashList[slashIdx]);
+                return;
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                setText('');
+                return;
+              }
+            }
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               submit();
             }
           }}
         />
+        {slashList && (
+          <div className="slash-suggest" role="listbox" aria-label="Slash commands">
+            {slashList.map((name, i) => (
+              <button
+                key={name}
+                type="button"
+                role="option"
+                aria-selected={i === slashIdx}
+                className={`slash-suggest-item ${i === slashIdx ? 'active' : ''}`}
+                onMouseEnter={() => setSlashIdx(i)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  acceptSlash(name);
+                }}
+              >
+                <span className="slash-suggest-slash">/</span>
+                <span className="slash-suggest-name">{name}</span>
+              </button>
+            ))}
+            <div className="slash-suggest-hint">↑↓ to pick · Tab or Enter to insert · Esc to clear</div>
+          </div>
+        )}
 
         <button
           className="btn btn-accent send-btn"

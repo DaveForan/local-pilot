@@ -52,7 +52,13 @@ export type RunnerEvent =
       };
       text: string;
     }
-  | { kind: 'claude_session'; claudeSessionId: string; model: string | null };
+  | {
+      kind: 'claude_session';
+      claudeSessionId: string;
+      model: string | null;
+      /** Slash commands the SDK exposes for this session (e.g. /help, /clear). */
+      slashCommands: string[];
+    };
 
 export interface PermissionOutcome {
   behavior: 'allow' | 'deny';
@@ -208,6 +214,9 @@ export class ClaudeRunner {
               kind: 'claude_session',
               claudeSessionId: msg.session_id,
               model: typeof msg.model === 'string' ? msg.model : null,
+              slashCommands: Array.isArray(msg.slash_commands)
+                ? (msg.slash_commands as string[]).filter((s) => typeof s === 'string')
+                : [],
             });
           }
           this.opts.onEvent({

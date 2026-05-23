@@ -175,6 +175,10 @@ export class Session {
           this.meta.model = event.model;
           changed = true;
         }
+        if (!arraysEqual(this.meta.slashCommands, event.slashCommands)) {
+          this.meta.slashCommands = event.slashCommands;
+          changed = true;
+        }
         if (changed) this.hooks.onMeta(this.meta);
         break;
       }
@@ -291,4 +295,11 @@ export class Session {
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function arraysEqual(a: string[] | undefined, b: string[] | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }

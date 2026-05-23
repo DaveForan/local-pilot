@@ -1108,6 +1108,59 @@ textarea {
   background: var(--bg-1);
   padding: 12px 18px;
   flex-shrink: 0;
+  position: relative;
+}
+
+/* slash-command autocomplete — opens above the composer when the user
+ * starts typing "/" so commands are discoverable instead of hidden. */
+.slash-suggest {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: calc(100% - 4px);
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.35);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 30;
+  max-height: 260px;
+  overflow: auto;
+}
+.slash-suggest-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-1);
+  font-size: 14px;
+}
+.slash-suggest-item:hover,
+.slash-suggest-item.active {
+  background: var(--bg-3);
+}
+.slash-suggest-slash {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+.slash-suggest-name {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.slash-suggest-hint {
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 6px 10px 2px;
+  border-top: 1px solid var(--line-soft);
+  margin-top: 4px;
 }
 .composer-busy {
   display: flex;
