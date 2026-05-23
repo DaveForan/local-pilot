@@ -90,6 +90,24 @@ export function createApiRouter(manager: SessionManager) {
     },
   );
 
+  // --- file rewind ---------------------------------------------------------
+  // Body: { userUuid: string, dryRun?: boolean }. Returns a RewindResult.
+  router.post('/sessions/:id/rewind', async (req, res) => {
+    const session = manager.get(req.params.id);
+    if (!session) {
+      res.status(404).json({ error: 'unknown session' });
+      return;
+    }
+    const body = (req.body ?? {}) as { userUuid?: unknown; dryRun?: unknown };
+    if (typeof body.userUuid !== 'string' || !body.userUuid) {
+      res.status(400).json({ error: 'userUuid required' });
+      return;
+    }
+    const dryRun = body.dryRun !== false;
+    const result = await session.rewindFiles(body.userUuid, dryRun);
+    res.json(result);
+  });
+
   // --- session export ------------------------------------------------------
   router.get('/sessions/:id/export', (req, res) => {
     const session = manager.get(req.params.id);

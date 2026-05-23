@@ -35,6 +35,15 @@ export interface SlashCommand {
   argumentHint: string;
 }
 
+/** Result of a rewindFiles() call. */
+export interface RewindResult {
+  canRewind: boolean;
+  error?: string;
+  filesChanged?: string[];
+  insertions?: number;
+  deletions?: number;
+}
+
 /** A base64-encoded image — attached by the user, or produced by a tool. */
 export interface ChatImage {
   mediaType: string;
@@ -44,7 +53,15 @@ export interface ChatImage {
 
 /** A single entry in a session's rendered timeline. */
 export type SessionEvent =
-  | { seq: number; ts: number; kind: 'user'; text: string; images?: ChatImage[] }
+  | {
+      seq: number;
+      ts: number;
+      kind: 'user';
+      text: string;
+      images?: ChatImage[];
+      /** SDK-assigned uuid for this user message — required to rewind to it. */
+      userUuid?: string;
+    }
   | { seq: number; ts: number; kind: 'assistant'; text: string }
   | { seq: number; ts: number; kind: 'thinking'; text: string }
   | { seq: number; ts: number; kind: 'tool_use'; toolId: string; name: string; input: unknown }

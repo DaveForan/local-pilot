@@ -5,6 +5,7 @@ import { ActivityLog } from './ActivityLog';
 import { TodoCard } from './TodoCard';
 import { Reply } from './Reply';
 import { LightboxImage } from './ImageLightbox';
+import { RewindDialog } from './RewindDialog';
 import { speak, stopSpeaking, speechOutputSupported } from '../speech';
 
 type ActivityEvent = Extract<
@@ -21,6 +22,8 @@ export interface Turn {
   userText: string | null;
   /** Images the user attached to their message. */
   userImages: ChatImage[];
+  /** SDK-assigned uuid for the user message — needed to rewind to this turn. */
+  userUuid: string | null;
   /** Tool calls, results, thinking and system notes — hidden behind the log. */
   activity: ActivityEvent[];
   /** Assistant text blocks — shown as the visible response. */
@@ -43,6 +46,7 @@ function groupTurns(events: SessionEvent[]): Turn[] {
       key,
       userText: null,
       userImages: [],
+      userUuid: null,
       activity: [],
       texts: [],
       permissions: [],
@@ -58,6 +62,7 @@ function groupTurns(events: SessionEvent[]): Turn[] {
       const t = open(e.seq);
       t.userText = e.text;
       t.userImages = e.images ?? [];
+      t.userUuid = e.userUuid ?? null;
       continue;
     }
     const t = cur ?? open(e.seq);
@@ -108,6 +113,10 @@ const MORE_PER_CLICK = 50;
 export function Timeline({ sessionId, events, status, voiceMode, onReplySpoken }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
   const [logKey, setLogKey] = useState<number | null>(null);
+  const [rewindTarget, setRewindTarget] = useState<{
+    userUuid: string;
+    userText: string;
+  } | null>(null);
   const [visible, setVisible] = useState(INITIAL_VISIBLE_TURNS);
   const spokenRef = useRef<number>(-1);
   const turns = useMemo(() => groupTurns(events), [events]);
@@ -174,11 +183,28 @@ export function Timeline({ sessionId, events, status, voiceMode, onReplySpoken }
               (status === 'running' || status === 'awaiting_permission')
             }
             onOpenLog={() => setLogKey(turn.key)}
+            onRewind={
+              turn.userUuid
+                ? () =>
+                    setRewindTarget({
+                      userUuid: turn.userUuid!,
+                      userText: turn.userText ?? '',
+                    })
+                : null
+            }
           />
         );
       })}
       <div ref={endRef} />
       {logTurn && <ActivityLog turn={logTurn} onClose={() => setLogKey(null)} />}
+      {rewindTarget && (
+        <RewindDialog
+          sessionId={sessionId}
+          userUuid={rewindTarget.userUuid}
+          userText={rewindTarget.userText}
+          onClose={() => setRewindTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -188,11 +214,14 @@ function TurnView({
   turn,
   running,
   onOpenLog,
+  onRewind,
 }: {
   sessionId: string;
   turn: Turn;
   running: boolean;
   onOpenLog: () => void;
+  /** Present when the SDK's user uuid is known — clicking opens the rewind dialog. */
+  onRewind: (() => void) | null;
 }) {
   const toolCount = turn.activity.reduce((n, e) => (e.kind === 'tool_use' ? n + 1 : n), 0);
   const hasThinking = turn.activity.some((e) => e.kind === 'thinking');
@@ -222,6 +251,16 @@ function TurnView({
             )}
             {turn.userText && <span className="bubble-text">{turn.userText}</span>}
           </div>
+          {onRewind && (
+            <button
+              type="button"
+              className="rewind-btn"
+              onClick={onRewind}
+              title="Restore tracked files to their state at this turn"
+            >
+              ↶ Rewind files to here
+            </button>
+          )}
         </div>
       )}
 

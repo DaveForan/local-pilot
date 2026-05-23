@@ -503,7 +503,9 @@ textarea {
 
 .ev-user {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
 }
 .bubble {
   background: var(--accent);
@@ -513,6 +515,64 @@ textarea {
   max-width: 80%;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* "Rewind files to here" — small ghost button under each user bubble,
+ * only shown once the SDK echoes a uuid we can rewind to. */
+.rewind-btn {
+  background: transparent;
+  color: var(--text-3);
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 120ms, border-color 120ms;
+}
+.rewind-btn:hover {
+  color: var(--text-1);
+  border-color: var(--line);
+}
+
+/* rewind dialog */
+.rewind-snippet {
+  color: var(--text-2);
+  font-style: italic;
+}
+.rewind-loading,
+.rewind-summary,
+.rewind-error {
+  padding: 10px 14px;
+  font-size: 14px;
+}
+.rewind-error {
+  color: var(--danger, #c0392b);
+  background: var(--bg-3);
+  border-radius: 8px;
+}
+.rewind-summary.rewind-done {
+  color: var(--accent);
+}
+.rewind-add {
+  color: #2ea043;
+  font-family: var(--font-mono);
+}
+.rewind-del {
+  color: #cf222e;
+  font-family: var(--font-mono);
+}
+.rewind-files {
+  list-style: none;
+  margin: 0;
+  padding: 4px 14px 12px;
+  max-height: 220px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-2);
+}
+.rewind-files li {
+  padding: 2px 0;
 }
 
 .ev-assistant {

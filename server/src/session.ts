@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import { ClaudeRunner } from './claudeRunner';
-import type { RunnerEvent, PermissionOutcome } from './claudeRunner';
+import type { RunnerEvent, PermissionOutcome, RewindResult } from './claudeRunner';
 import { readMcpServersSync } from './mcpConfig';
 import type { PersistedSession } from './store';
 import type {
@@ -62,6 +62,28 @@ export class Session {
     this.add(images && images.length > 0 ? { kind: 'user', text, images } : { kind: 'user', text });
     this.setStatus('running');
     this.ensureRunner().send(text, images);
+  }
+
+  /** Rewind files to their state at the given user message uuid.
+   *  Requires a live runner — file checkpoints live in the SDK process. */
+  async rewindFiles(userUuid: string, dryRun: boolean): Promise<RewindResult> {
+    if (!this.runner) {
+      return {
+        canRewind: false,
+        error:
+          'No active Claude runner — file checkpoints exist only while the session is running.',
+      };
+    }
+    const result = await this.runner.rewindFiles(userUuid, dryRun);
+    if (result.canRewind && !dryRun) {
+      const files = result.filesChanged ?? [];
+      const summary =
+        files.length === 0
+          ? 'Rewind applied — no files changed.'
+          : `Rewound ${files.length} file${files.length === 1 ? '' : 's'} (${result.insertions ?? 0}+/${result.deletions ?? 0}-).`;
+      this.add({ kind: 'system', text: summary });
+    }
+    return result;
   }
 
   async interrupt(): Promise<void> {
@@ -189,6 +211,20 @@ export class Session {
         if (!slashCommandsEqual(this.meta.slashCommands, event.commands)) {
           this.meta.slashCommands = event.commands;
           this.hooks.onMeta(this.meta);
+        }
+        break;
+      }
+      case 'user_uuid': {
+        // The SDK echoed our most recent user message with its assigned uuid;
+        // walk back to find the latest user event without one and patch it,
+        // so the timeline can offer "Rewind to here" on this turn.
+        for (let i = this.events.length - 1; i >= 0; i--) {
+          const e = this.events[i];
+          if (e.kind === 'user' && !e.userUuid) {
+            e.userUuid = event.uuid;
+            this.touch(e);
+            break;
+          }
         }
         break;
       }

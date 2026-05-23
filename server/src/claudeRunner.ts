@@ -23,6 +23,18 @@ interface LooseQuery extends AsyncGenerator<Record<string, any>> {
   supportedCommands?: () => Promise<
     Array<{ name: string; description: string; argumentHint: string }>
   >;
+  /** Restore tracked files to their state at the given user-message uuid.
+   *  Requires enableFileCheckpointing: true at start. */
+  rewindFiles?: (
+    userMessageId: string,
+    options?: { dryRun?: boolean },
+  ) => Promise<{
+    canRewind: boolean;
+    error?: string;
+    filesChanged?: string[];
+    insertions?: number;
+    deletions?: number;
+  }>;
 }
 
 const runQuery = query as unknown as (arg: {
@@ -67,7 +79,18 @@ export type RunnerEvent =
        *  `slash_commands` event once the control-channel RPC resolves. */
       slashCommands: SlashCommand[];
     }
-  | { kind: 'slash_commands'; commands: SlashCommand[] };
+  | { kind: 'slash_commands'; commands: SlashCommand[] }
+  /** SDK echoed back a user message — carries the uuid we need to rewind to. */
+  | { kind: 'user_uuid'; uuid: string };
+
+/** Result of a rewindFiles() call — mirrors the SDK's RewindFilesResult. */
+export interface RewindResult {
+  canRewind: boolean;
+  error?: string;
+  filesChanged?: string[];
+  insertions?: number;
+  deletions?: number;
+}
 
 export interface PermissionOutcome {
   behavior: 'allow' | 'deny';
@@ -174,6 +197,9 @@ export class ClaudeRunner {
       // ~/.claude config, project settings, CLAUDE.md and MCP servers.
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       settingSources: ['user', 'project', 'local'],
+      // Snapshot files before each modification so the user can rewind the
+      // workspace back to the state at any prior turn via rewindFiles().
+      enableFileCheckpointing: true,
       canUseTool: async (toolName: string, input: Record<string, unknown>, extra: any) => {
         // TodoWrite is tracking-only (no filesystem / no exec); auto-allow so
         // the user isn't pestered every time Claude updates the task list.
@@ -262,6 +288,13 @@ export class ClaudeRunner {
         break;
       }
       case 'user': {
+        // The SDK echoes back every user message with its assigned uuid —
+        // we capture that so the UI can later pass it to rewindFiles().
+        // Tool-result blocks (when a tool's output is delivered as a "user"
+        // turn) are also extracted here.
+        if (typeof msg.uuid === 'string' && msg.uuid) {
+          this.opts.onEvent({ kind: 'user_uuid', uuid: msg.uuid });
+        }
         const content = msg.message?.content;
         if (Array.isArray(content)) {
           for (const block of content) {
@@ -339,6 +372,27 @@ export class ClaudeRunner {
       this.opts.onEvent({ kind: 'slash_commands', commands });
     } catch (err) {
       console.warn('[runner] supportedCommands failed:', err);
+    }
+  }
+
+  /** Restore files to their state at the given user message. dryRun previews
+   *  the change without modifying the workspace. */
+  async rewindFiles(userUuid: string, dryRun: boolean): Promise<RewindResult> {
+    const gen = this.generator;
+    if (!gen || typeof gen.rewindFiles !== 'function') {
+      return { canRewind: false, error: 'Rewind not supported by this SDK build.' };
+    }
+    try {
+      const result = await gen.rewindFiles(userUuid, { dryRun });
+      return {
+        canRewind: !!result.canRewind,
+        error: result.error,
+        filesChanged: result.filesChanged,
+        insertions: result.insertions,
+        deletions: result.deletions,
+      };
+    } catch (err) {
+      return { canRewind: false, error: err instanceof Error ? err.message : String(err) };
     }
   }
 
