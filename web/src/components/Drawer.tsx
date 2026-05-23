@@ -90,6 +90,27 @@ function fmtCount(n: number): string {
   return `${(n / 1_000_000).toFixed(2)}M`;
 }
 
+/** Best-effort context-window size for a given Claude model id.
+ *  All current Claude 4.x models default to 200K; the 1M beta is opt-in. */
+function contextWindowFor(model: string | null): number {
+  if (!model) return 200_000;
+  if (model.startsWith('claude-haiku-')) return 200_000;
+  if (model.startsWith('claude-sonnet-')) return 200_000;
+  if (model.startsWith('claude-opus-')) return 200_000;
+  return 200_000;
+}
+
+/** Sum of every token kind that occupies the model's prompt window. */
+function currentContextTokens(events: SessionEvent[]): number | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e.kind === 'result' && e.tokens) {
+      return e.tokens.input + e.tokens.cacheRead + e.tokens.cacheCreate;
+    }
+  }
+  return null;
+}
+
 export function Drawer({
   open,
   sessions,
@@ -126,6 +147,10 @@ export function Drawer({
     : sessions;
 
   const totals = active ? totalsFromEvents(activeEvents) : null;
+  const ctxUsed = active ? currentContextTokens(activeEvents) : null;
+  const ctxLimit = contextWindowFor(activeModel);
+  const ctxPct = ctxUsed != null ? Math.min(100, Math.round((ctxUsed / ctxLimit) * 100)) : 0;
+  const ctxWarn = ctxPct >= 80;
 
   const startRename = (): void => {
     if (!active) return;
@@ -250,6 +275,22 @@ export function Drawer({
                 >
                   <span>Output style</span>
                   <span className="cs-mono">{active.outputStyle}</span>
+                </div>
+              )}
+              {ctxUsed != null && (
+                <div className="cs-context" title="Current prompt size vs. the model's context window. Approaching 100% triggers compaction.">
+                  <div className="cs-context-row">
+                    <span>Context</span>
+                    <span className="cs-mono">
+                      {fmtCount(ctxUsed)} / {fmtCount(ctxLimit)} · {ctxPct}%
+                    </span>
+                  </div>
+                  <div className="cs-context-bar">
+                    <div
+                      className={`cs-context-fill ${ctxWarn ? 'warn' : ''}`}
+                      style={{ width: `${ctxPct}%` }}
+                    />
+                  </div>
                 </div>
               )}
               {totals && totals.turns > 0 && (

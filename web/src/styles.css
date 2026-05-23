@@ -447,6 +447,33 @@ textarea {
   text-overflow: ellipsis;
 }
 
+/* context-window indicator */
+.cs-context {
+  padding: 8px 4px 4px;
+}
+.cs-context-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+  padding-bottom: 4px;
+}
+.cs-context-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.cs-context-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 240ms;
+}
+.cs-context-fill.warn {
+  background: #f0c800;
+}
+
 .cs-field {
   display: flex;
   flex-direction: column;
