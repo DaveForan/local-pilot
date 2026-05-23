@@ -1,5 +1,11 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { PermissionMode, ChatImage, SlashCommand, ModelInfo } from './protocol';
+import type {
+  PermissionMode,
+  ChatImage,
+  SlashCommand,
+  ModelInfo,
+  McpServerStatus,
+} from './protocol';
 
 // --- SDK boundary -----------------------------------------------------------
 // The Agent SDK's exact TypeScript surface is verified separately. To keep the
@@ -26,6 +32,14 @@ interface LooseQuery extends AsyncGenerator<Record<string, any>> {
   /** Models available to this account — id, display name, description. */
   supportedModels?: () => Promise<
     Array<{ value: string; displayName: string; description: string }>
+  >;
+  /** Live connection status of every configured MCP server. */
+  mcpServerStatus?: () => Promise<
+    Array<{
+      name: string;
+      status: string;
+      serverInfo?: { name: string; version: string };
+    }>
   >;
   /** Restore tracked files to their state at the given user-message uuid.
    *  Requires enableFileCheckpointing: true at start. */
@@ -402,6 +416,27 @@ export class ClaudeRunner {
     }
   }
 
+  /** Snapshot the connection state of every MCP server the SDK has loaded.
+   *  Returns null when the SDK has no live connection (no runner yet, etc). */
+  async mcpServerStatus(): Promise<McpServerStatus[] | null> {
+    const gen = this.generator;
+    if (!gen || typeof gen.mcpServerStatus !== 'function') return null;
+    try {
+      const list = await gen.mcpServerStatus();
+      if (!Array.isArray(list)) return null;
+      return list
+        .filter((s) => s && typeof s.name === 'string')
+        .map((s) => ({
+          name: s.name,
+          status: normalizeMcpStatus(s.status),
+          serverInfo: s.serverInfo,
+        }));
+    } catch (err) {
+      console.warn('[runner] mcpServerStatus failed:', err);
+      return null;
+    }
+  }
+
   /** Restore files to their state at the given user message. dryRun previews
    *  the change without modifying the workspace. */
   async rewindFiles(userUuid: string, dryRun: boolean): Promise<RewindResult> {
@@ -453,6 +488,11 @@ export class ClaudeRunner {
       console.error('[runner] close failed:', err);
     }
   }
+}
+
+function normalizeMcpStatus(s: unknown): McpServerStatus['status'] {
+  if (s === 'connected' || s === 'failed' || s === 'needs-auth' || s === 'pending') return s;
+  return 'unknown';
 }
 
 /** Tool results may be a string or an array of content blocks — flatten to text. */

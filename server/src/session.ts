@@ -13,6 +13,7 @@ import type {
   ChatImage,
   SlashCommand,
   ModelInfo,
+  McpServerStatus,
 } from './protocol';
 
 type PermissionEvent = Extract<SessionEvent, { kind: 'permission' }>;
@@ -65,6 +66,15 @@ export class Session {
     this.add(images && images.length > 0 ? { kind: 'user', text, images } : { kind: 'user', text });
     this.setStatus('running');
     this.ensureRunner().send(text, images);
+  }
+
+  /** Returns null if there's no live runner. */
+  hasRunner(): boolean {
+    return this.runner !== null;
+  }
+
+  async mcpServerStatus(): Promise<McpServerStatus[] | null> {
+    return this.runner ? this.runner.mcpServerStatus() : null;
   }
 
   /** Rewind files to their state at the given user message uuid.

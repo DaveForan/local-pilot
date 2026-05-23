@@ -97,6 +97,13 @@ export function createApiRouter(manager: SessionManager) {
     res.json(manager.models());
   });
 
+  // --- live MCP server status ----------------------------------------------
+  // Returns null when no session has a live runner — MCP connections live
+  // inside the SDK process, so there's nothing to query yet.
+  router.get('/mcp/status', async (_req, res) => {
+    res.json({ status: await manager.mcpServerStatus() });
+  });
+
   // --- file rewind ---------------------------------------------------------
   // Body: { userUuid: string, dryRun?: boolean }. Returns a RewindResult.
   router.post('/sessions/:id/rewind', async (req, res) => {

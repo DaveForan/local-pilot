@@ -42,6 +42,13 @@ export interface ModelInfo {
   description: string;
 }
 
+/** Live status of one MCP server connection. */
+export interface McpServerStatus {
+  name: string;
+  status: 'connected' | 'failed' | 'needs-auth' | 'pending' | 'unknown';
+  serverInfo?: { name: string; version: string };
+}
+
 /** Result of a rewindFiles() call. */
 export interface RewindResult {
   canRewind: boolean;

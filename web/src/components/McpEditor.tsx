@@ -77,9 +77,32 @@ export function McpEditor() {
   const [origName, setOrigName] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [statusByName, setStatusByName] = useState<Map<string, string>>(new Map());
+  const [statusLoading, setStatusLoading] = useState(false);
 
   useEffect(() => {
     api.mcp().then(setServers).catch((e) => setErr(String(e)));
+  }, []);
+
+  const refreshStatus = (): void => {
+    setStatusLoading(true);
+    api
+      .mcpStatus()
+      .then((r) => {
+        const map = new Map<string, string>();
+        for (const s of r.status ?? []) map.set(s.name, s.status);
+        setStatusByName(map);
+      })
+      .catch(() => {
+        /* leave empty — UI shows "—" */
+      })
+      .finally(() => setStatusLoading(false));
+  };
+
+  // Pull status once on mount; it's cheap (cached at manager level) and gives
+  // immediate feedback if any server is failing.
+  useEffect(() => {
+    refreshStatus();
   }, []);
 
   const persist = async (next: McpServers): Promise<void> => {
@@ -151,15 +174,32 @@ export function McpEditor() {
         These MCP servers are added to every Claude Code session local-pilot starts. They take
         effect the next time a session begins a turn.
       </p>
+      <div className="mcp-status-bar">
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={refreshStatus}
+          disabled={statusLoading}
+          title="Pull live connection state from any running session"
+        >
+          {statusLoading ? 'Checking…' : '↻ Refresh status'}
+        </button>
+        {statusByName.size === 0 && !statusLoading && (
+          <span className="empty-hint">No live session — status unknown.</span>
+        )}
+      </div>
       <div className="mcp-list">
         {names.length === 0 && <div className="empty-hint">No MCP servers configured.</div>}
         {names.map((name) => {
           const s = servers[name];
           const summary = 'url' in s ? `${s.type} · ${s.url}` : `stdio · ${s.command}`;
+          const status = statusByName.get(name);
           return (
             <div key={name} className="mcp-row">
               <div className="mcp-row-text">
-                <div className="mcp-row-name">{name}</div>
+                <div className="mcp-row-name">
+                  {name}
+                  {status && <McpStatusPill status={status} />}
+                </div>
                 <div className="mcp-row-sub">{summary}</div>
               </div>
               <button
@@ -192,6 +232,20 @@ export function McpEditor() {
       </button>
     </div>
   );
+}
+
+function McpStatusPill({ status }: { status: string }) {
+  const label =
+    status === 'connected'
+      ? 'connected'
+      : status === 'failed'
+        ? 'failed'
+        : status === 'needs-auth'
+          ? 'needs auth'
+          : status === 'pending'
+            ? 'pending'
+            : status;
+  return <span className={`mcp-pill mcp-pill-${status}`}>{label}</span>;
 }
 
 interface FormProps {

@@ -1,7 +1,7 @@
 // Thin REST client for everything that is not the live session stream.
 // Auth rides on an HttpOnly session cookie, so requests carry no secret.
 
-import type { RewindResult, ModelInfo } from './protocol';
+import type { RewindResult, ModelInfo, McpServerStatus } from './protocol';
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -107,6 +107,7 @@ export const api = {
   saveSettings: (s: Record<string, unknown>) => req<{ ok: true }>('PUT', '/claude/settings', s),
   mcp: () => req<McpServers>('GET', '/mcp'),
   saveMcp: (servers: McpServers) => req<{ ok: true }>('PUT', '/mcp', servers),
+  mcpStatus: () => req<{ status: McpServerStatus[] | null }>('GET', '/mcp/status'),
   pushVapid: () => req<{ publicKey: string }>('GET', '/push/vapid'),
   pushSubscribe: (sub: unknown) => req<{ ok: true }>('POST', '/push/subscribe', sub),
   pushUnsubscribe: (endpoint: string) =>

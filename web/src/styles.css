@@ -2063,6 +2063,42 @@ textarea {
 }
 .mcp-row-name {
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* live connection status pill — populated from mcpServerStatus() RPC */
+.mcp-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.mcp-pill {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.mcp-pill-connected {
+  background: rgba(46, 160, 67, 0.15);
+  color: #2ea043;
+}
+.mcp-pill-failed {
+  background: rgba(207, 34, 46, 0.15);
+  color: #cf222e;
+}
+.mcp-pill-needs-auth {
+  background: rgba(240, 158, 0, 0.18);
+  color: #c46c00;
+}
+.mcp-pill-pending,
+.mcp-pill-unknown {
+  background: var(--bg-3);
+  color: var(--text-3);
 }
 .mcp-row-sub {
   font-size: 11px;

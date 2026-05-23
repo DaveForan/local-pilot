@@ -12,6 +12,7 @@ import type {
   PermissionDecision,
   ChatImage,
   ModelInfo,
+  McpServerStatus,
 } from './protocol';
 
 /** Owns every Session, wires their hooks to the WebSocket broadcaster. */
@@ -41,6 +42,18 @@ export class SessionManager {
 
   models(): ModelInfo[] {
     return this.cachedModels;
+  }
+
+  /** Query MCP status from any session with a live runner. Returns null when
+   *  no session is active — the SDK process is where the connections live. */
+  async mcpServerStatus(): Promise<McpServerStatus[] | null> {
+    for (const session of this.sessions.values()) {
+      if (session.hasRunner()) {
+        const status = await session.mcpServerStatus();
+        if (status) return status;
+      }
+    }
+    return null;
   }
 
   list(): SessionMeta[] {
