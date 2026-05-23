@@ -281,10 +281,42 @@ textarea {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--danger);
+  background: var(--text-3);
 }
-.conn.on .conn-dot {
-  background: var(--ok);
+.conn-open .conn-dot {
+  background: var(--ok, #2ea043);
+}
+.conn-connecting .conn-dot,
+.conn-retrying .conn-dot {
+  background: #f0c800;
+  animation: conn-pulse 1.2s ease-in-out infinite;
+}
+.conn-unreachable .conn-dot,
+.conn-auth_expired .conn-dot {
+  background: var(--danger, #cf222e);
+}
+@keyframes conn-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.conn-relogin {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.conn-relogin:hover {
+  border-color: var(--text-2);
+  color: var(--text-1);
 }
 
 /* ===== session cards ===================================================== */

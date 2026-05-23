@@ -10,8 +10,19 @@ import type {
 } from './protocol';
 import { api, type Snippet } from './api';
 
+export type ConnectionState =
+  | 'connecting' // first attempt, no result yet
+  | 'open' // WS is up
+  | 'retrying' // dropped, scheduled to retry
+  | 'auth_expired' // server rejected the handshake — cookie is invalid
+  | 'unreachable'; // multiple back-to-back failures — server seems down
+
 export interface PilotState {
   connected: boolean;
+  /** Fine-grained connection state — connected is true iff this is 'open'. */
+  conn: ConnectionState;
+  /** Consecutive failed attempts since the last successful open. */
+  retryCount: number;
   sessions: SessionMeta[];
   /** Timeline events keyed by session id. */
   events: Record<string, SessionEvent[]>;
@@ -28,6 +39,8 @@ export interface PilotState {
 class PilotStore {
   private state: PilotState = {
     connected: false,
+    conn: 'connecting',
+    retryCount: 0,
     sessions: [],
     events: {},
     activeId: null,
@@ -70,8 +83,9 @@ class PilotStore {
     // The session cookie authenticates the handshake automatically.
     const ws = new WebSocket(`${proto}://${location.host}/ws`);
     this.ws = ws;
+    if (this.state.conn !== 'open') this.patch({ conn: 'connecting' });
     ws.onopen = () => {
-      this.patch({ connected: true });
+      this.patch({ connected: true, conn: 'open', retryCount: 0 });
       // Re-attach to every session we were watching before the drop.
       for (const id of this.attached) this.raw({ t: 'attach', sessionId: id });
     };
@@ -82,19 +96,34 @@ class PilotStore {
         /* ignore malformed frame */
       }
     };
-    ws.onclose = () => {
-      this.patch({ connected: false });
-      this.scheduleReconnect();
+    ws.onclose = (ev) => {
+      // 4401 (or any 4xxx) is what we'd use server-side if the cookie was
+      // bad; treat it as auth expired so the UI can force a re-login.
+      // Otherwise classify by retry count so the user can tell "drop in
+      // progress" from "server probably down".
+      let nextConn: ConnectionState;
+      const nextRetry = this.state.retryCount + 1;
+      if (ev.code === 4401 || ev.code === 1008) {
+        nextConn = 'auth_expired';
+      } else if (nextRetry >= 4) {
+        nextConn = 'unreachable';
+      } else {
+        nextConn = 'retrying';
+      }
+      this.patch({ connected: false, conn: nextConn, retryCount: nextRetry });
+      if (nextConn !== 'auth_expired') this.scheduleReconnect(nextRetry);
     };
     ws.onerror = () => ws.close();
   }
 
-  private scheduleReconnect(): void {
+  /** Exponential backoff capped at 30s. Resets to 0 on successful open. */
+  private scheduleReconnect(retryCount: number): void {
     if (this.reconnectTimer != null) return;
+    const delay = Math.min(30_000, 1500 * Math.pow(1.7, Math.min(8, retryCount - 1)));
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
-    }, 1500);
+    }, delay);
   }
 
   private raw(msg: ClientMessage): void {

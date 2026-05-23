@@ -43,7 +43,7 @@ function modelFromEvents(events: SessionEvent[] | undefined): string | null {
 }
 
 export function App() {
-  const { sessions, activeId, events, connected, error } = usePilot();
+  const { sessions, activeId, events, connected, conn, retryCount, error } = usePilot();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -142,6 +142,8 @@ export function App() {
         activeModel={activeModel}
         activeEvents={activeEvents}
         connected={connected}
+        conn={conn}
+        retryCount={retryCount}
         theme={theme}
         onSelect={(id) => {
           store.select(id);

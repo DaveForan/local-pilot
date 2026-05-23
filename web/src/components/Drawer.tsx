@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { SessionMeta, SessionEvent, PermissionMode, AccountInfo } from '../protocol';
+import type { ConnectionState } from '../store';
 import { store } from '../store';
 import { relativeTime, shortPath } from '../format';
 import { STATUS } from './status';
@@ -22,6 +23,9 @@ interface Props {
   /** Events of the active session — for cost/duration totals. */
   activeEvents: SessionEvent[];
   connected: boolean;
+  /** Fine-grained WS state — used to differentiate retry / unreachable / auth. */
+  conn: ConnectionState;
+  retryCount: number;
   theme: Theme;
   onSelect: (id: string) => void;
   onNew: () => void;
@@ -84,6 +88,36 @@ function fmtDuration(ms: number): string {
   return `${m}m ${s}s`;
 }
 
+function connStatusLabel(conn: ConnectionState, retryCount: number): string {
+  switch (conn) {
+    case 'open':
+      return 'Connected';
+    case 'connecting':
+      return 'Connecting…';
+    case 'retrying':
+      return retryCount > 1 ? `Reconnecting (try ${retryCount})…` : 'Reconnecting…';
+    case 'unreachable':
+      return `Server unreachable (${retryCount} attempts)`;
+    case 'auth_expired':
+      return 'Session expired';
+  }
+}
+
+function connStatusTooltip(conn: ConnectionState, retryCount: number): string {
+  switch (conn) {
+    case 'open':
+      return 'Live WebSocket to the server';
+    case 'connecting':
+      return 'Opening the WebSocket…';
+    case 'retrying':
+      return `WebSocket dropped — retrying with backoff (attempt ${retryCount})`;
+    case 'unreachable':
+      return 'Multiple consecutive failures — the server may be down or unreachable over your tailnet.';
+    case 'auth_expired':
+      return 'Server rejected the cookie — sign in again to refresh it.';
+  }
+}
+
 function fmtCount(n: number): string {
   if (n < 1000) return String(n);
   if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
@@ -119,6 +153,8 @@ export function Drawer({
   activeModel,
   activeEvents,
   connected,
+  conn,
+  retryCount,
   theme,
   onSelect,
   onNew,
@@ -388,9 +424,22 @@ export function Drawer({
           >
             <span className="drawer-nav-icon">⎋</span> Sign out
           </button>
-          <div className={`conn ${connected ? 'on' : 'off'}`}>
+          <div
+            className={`conn conn-${conn}`}
+            title={connStatusTooltip(conn, retryCount)}
+          >
             <span className="conn-dot" />
-            {connected ? 'Connected' : 'Reconnecting…'}
+            {connStatusLabel(conn, retryCount)}
+            {conn === 'auth_expired' && (
+              <button
+                className="conn-relogin"
+                onClick={() => {
+                  void api.logout().finally(() => location.reload());
+                }}
+              >
+                Sign in again
+              </button>
+            )}
           </div>
         </div>
       </aside>
