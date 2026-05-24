@@ -62,6 +62,15 @@ export class Session {
     this.events = events;
     this.hooks = hooks;
     this.seq = events.reduce((max, e) => Math.max(max, e.seq), 0);
+    // Any "pending" permissions on disk are orphaned — the SDK promise that
+    // could have resolved them died with the previous process. Mark them so
+    // the UI doesn't pop a forever-stuck modal.
+    for (const e of this.events) {
+      if (e.kind === 'permission' && e.status === 'pending') {
+        e.status = 'denied';
+        e.resolution = 'Denied — server restarted before this was answered.';
+      }
+    }
   }
 
   // --- input ----------------------------------------------------------------
@@ -130,31 +139,46 @@ export class Session {
 
   resolvePermission(requestId: string, decision: PermissionDecision): void {
     const entry = this.pending.get(requestId);
-    if (!entry) return;
-    this.pending.delete(requestId);
+
+    // Find the event by requestId either way — the entry may be gone (server
+    // restart, SDK aborted) while the event on disk is still "pending".
+    // Without this, the UI sits forever waiting for a resolution that
+    // silently never arrives.
+    const event = entry
+      ? entry.event
+      : (this.events.find(
+          (e) => e.kind === 'permission' && e.requestId === requestId,
+        ) as PermissionEvent | undefined);
+
+    if (!event) return; // truly unknown — nothing to do
+    if (event.status !== 'pending') return; // already resolved, ignore late click
+
+    if (entry) this.pending.delete(requestId);
 
     if (decision.behavior === 'allow') {
-      entry.event.status = 'allowed';
-      entry.event.resolution = 'Allowed';
+      event.status = 'allowed';
+      event.resolution = 'Allowed';
     } else if (decision.behavior === 'answer') {
       // The user answered an elicitation (e.g. AskUserQuestion).
-      entry.event.status = 'allowed';
-      entry.event.resolution = 'Answered';
+      event.status = 'allowed';
+      event.resolution = 'Answered';
     } else {
-      entry.event.status = 'denied';
-      entry.event.resolution = `Denied — ${decision.message}`;
+      event.status = 'denied';
+      event.resolution = `Denied — ${decision.message}`;
     }
-    this.touch(entry.event);
-    this.setStatus('running');
+    this.touch(event);
 
-    // The SDK only understands allow/deny. For 'answer', we deliver the
-    // structured response as the tool result via deny.message.
-    if (decision.behavior === 'allow') {
-      entry.resolve({ behavior: 'allow', updatedInput: decision.updatedInput });
-    } else if (decision.behavior === 'answer') {
-      entry.resolve({ behavior: 'deny', message: decision.data });
-    } else {
-      entry.resolve({ behavior: 'deny', message: decision.message });
+    // Only feed the SDK back if it's actually still waiting. Without a live
+    // entry the SDK has long given up and there's nothing to resolve.
+    if (entry) {
+      this.setStatus('running');
+      if (decision.behavior === 'allow') {
+        entry.resolve({ behavior: 'allow', updatedInput: decision.updatedInput });
+      } else if (decision.behavior === 'answer') {
+        entry.resolve({ behavior: 'deny', message: decision.data });
+      } else {
+        entry.resolve({ behavior: 'deny', message: decision.message });
+      }
     }
   }
 
