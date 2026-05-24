@@ -18,7 +18,7 @@ export function ActivityLog({ turn, onClose }: { turn: Turn; onClose: () => void
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="modal modal-wide"
+        className="modal modal-log"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

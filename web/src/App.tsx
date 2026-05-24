@@ -51,6 +51,23 @@ export function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(getTheme);
 
+  // When the tab returns to visibility, force a re-attach so we pull any
+  // events that arrived while we were backgrounded. Browsers will sometimes
+  // hold a WebSocket "open" client-side even after the server has long since
+  // dropped it on a TCP timeout — pending elicitations from that window
+  // would never reach us otherwise.
+  useEffect(() => {
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') store.refreshActive();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, []);
+
   // Ctrl-F / Cmd-F opens the in-session find bar. Don't grab it when the
   // user is in a regular input/textarea elsewhere (e.g. composer) — only
   // when nothing has focus that wants the keystroke for itself.

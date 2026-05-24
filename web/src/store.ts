@@ -197,6 +197,16 @@ class PilotStore {
     this.patch({ activeId: id });
   }
 
+  /** Force a fresh history pull for the active session. Used when the tab
+   *  becomes visible again — the WS may be open but the server already lost
+   *  track of us on a TCP timeout, leaving the event log stale (in particular,
+   *  pending elicitations that arrived while we were away). */
+  refreshActive(): void {
+    const id = this.state.activeId;
+    if (!id) return;
+    this.raw({ t: 'attach', sessionId: id });
+  }
+
   create(opts: {
     cwd: string;
     title?: string;

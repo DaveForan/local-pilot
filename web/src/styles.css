@@ -879,12 +879,46 @@ textarea {
 
 /* ===== activity log modal ================================================ */
 
+/* Override the small default modal sizing — activity logs are wide
+ * (file diffs, JSON, long command output) and need a single scrolling
+ * context, not nested scroll boxes. */
+.modal-log {
+  max-width: min(1080px, 96vw);
+  width: 96vw;
+  height: 88dvh;
+  max-height: 88dvh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-log .settings-head {
+  padding: 16px 20px 8px;
+  flex-shrink: 0;
+}
+.modal-log > .settings-note {
+  padding: 0 20px 8px;
+  flex-shrink: 0;
+}
 .log {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 60vh;
+  /* The modal itself owns the scroll — this is the only scrolling region. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  padding: 0 20px 20px;
+}
+/* Inside the activity-log modal, code blocks should grow naturally and
+ * let the modal's main scroll handle overflow — no nested scrolling. */
+.modal-log .code {
+  max-height: none;
+  overflow: visible;
+}
+.modal-log .file-diff {
+  max-height: none;
+  overflow: visible;
 }
 .log-item {
   background: var(--bg-2);
