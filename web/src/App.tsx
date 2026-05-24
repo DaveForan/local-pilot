@@ -6,6 +6,7 @@ import { ChatPane } from './components/ChatPane';
 import { NewSessionDialog } from './components/NewSessionDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { SearchBar } from './components/SearchBar';
+import { ElicitationModal } from './components/ElicitationModal';
 import { getTheme, applyTheme, type Theme } from './theme';
 
 /** Recover the resolved model from a session's history (the SDK reports it
@@ -133,6 +134,8 @@ export function App() {
         )}
         <ChatPane session={active} />
       </main>
+
+      <ElicitationModal sessionId={activeId} events={activeEvents} />
 
       <Drawer
         open={drawerOpen}

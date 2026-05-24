@@ -267,9 +267,21 @@ export class Session {
       case 'thinking':
         this.add({ kind: 'thinking', text: event.text });
         break;
-      case 'tool_use':
+      case 'tool_use': {
+        // The SDK occasionally re-emits the same tool_use id when a permission
+        // request aborts and the conversation later resumes — persisting both
+        // wrecks the Anthropic API call ("tool_use ids must be unique" → 400).
+        // Drop any second occurrence of the same id silently.
+        const dup = this.events.some(
+          (e) => e.kind === 'tool_use' && e.toolId === event.toolId,
+        );
+        if (dup) {
+          console.warn(`[session] dropping duplicate tool_use id=${event.toolId}`);
+          break;
+        }
         this.add({ kind: 'tool_use', toolId: event.toolId, name: event.name, input: event.input });
         break;
+      }
       case 'tool_result':
         this.add(
           event.images.length > 0
