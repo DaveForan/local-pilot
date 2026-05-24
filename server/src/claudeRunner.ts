@@ -223,6 +223,11 @@ export class ClaudeRunner {
     const options: Record<string, unknown> = {
       cwd: this.opts.cwd,
       permissionMode: this.opts.permissionMode,
+      // The SDK requires this safety flag when running in bypassPermissions
+      // mode — without it, the SDK refuses to start. Our canUseTool also
+      // honors the mode, so the two layers agree.
+      allowDangerouslySkipPermissions:
+        this.opts.permissionMode === 'bypassPermissions',
       // Run with the real Claude Code system prompt + load the user's
       // ~/.claude config, project settings, CLAUDE.md and MCP servers.
       systemPrompt: { type: 'preset', preset: 'claude_code' },
@@ -234,6 +239,17 @@ export class ClaudeRunner {
         // TodoWrite is tracking-only (no filesystem / no exec); auto-allow so
         // the user isn't pestered every time Claude updates the task list.
         if (toolName === 'TodoWrite') {
+          return { behavior: 'allow', updatedInput: input };
+        }
+        // Honor the current permissionMode here — without this, providing
+        // canUseTool would override the SDK's mode-based auto-allow and the
+        // user would still get prompted on every tool even with acceptEdits
+        // or bypassPermissions selected.
+        const mode = this.opts.permissionMode;
+        if (mode === 'bypassPermissions') {
+          return { behavior: 'allow', updatedInput: input };
+        }
+        if (mode === 'acceptEdits' && EDIT_TOOLS.has(toolName)) {
           return { behavior: 'allow', updatedInput: input };
         }
         const outcome = await this.opts.onPermission(toolName, input, extra?.suggestions);
@@ -494,6 +510,10 @@ export class ClaudeRunner {
   }
 
   async setMode(mode: PermissionMode): Promise<void> {
+    // Track the current mode locally so canUseTool can consult it on every
+    // tool call — without this, mode changes only take effect on the next
+    // runner spin-up.
+    this.opts.permissionMode = mode;
     try {
       if (this.generator && typeof this.generator.setPermissionMode === 'function') {
         await this.generator.setPermissionMode(mode);
@@ -524,6 +544,9 @@ export class ClaudeRunner {
     }
   }
 }
+
+/** Tools that count as edits for the acceptEdits permission mode. */
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 
 function normalizeMcpStatus(s: unknown): McpServerStatus['status'] {
   if (s === 'connected' || s === 'failed' || s === 'needs-auth' || s === 'pending') return s;

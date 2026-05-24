@@ -302,6 +302,19 @@ export function Drawer({
                 <span>Model</span>
                 <span className="cs-mono">{activeModel ?? 'not yet started'}</span>
               </div>
+              <label className="cs-field cs-field-mode">
+                <span>Permission mode</span>
+                <select
+                  value={active.permissionMode}
+                  onChange={(e) => store.setMode(active.id, e.target.value as PermissionMode)}
+                >
+                  {(Object.keys(MODE_LABEL) as PermissionMode[]).map((m) => (
+                    <option key={m} value={m}>
+                      {MODE_LABEL[m]}
+                    </option>
+                  ))}
+                </select>
+              </label>
               {active.outputStyle && (
                 <div
                   className="cs-row"
@@ -364,19 +377,6 @@ export function Drawer({
                   )}
                 </>
               )}
-              <label className="cs-field">
-                <span>Permission mode</span>
-                <select
-                  value={active.permissionMode}
-                  onChange={(e) => store.setMode(active.id, e.target.value as PermissionMode)}
-                >
-                  {(Object.keys(MODE_LABEL) as PermissionMode[]).map((m) => (
-                    <option key={m} value={m}>
-                      {MODE_LABEL[m]}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <a
                 className="btn btn-ghost drawer-export"
                 href={api.exportUrl(active.id)}
