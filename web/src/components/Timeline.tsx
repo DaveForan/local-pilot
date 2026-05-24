@@ -49,6 +49,14 @@ function groupTimeline(events: SessionEvent[]): TimelineItem[] {
   // Per-turn set of TodoWrite tool ids so their acknowledgement results stay
   // out of the generic activity log.
   let todoToolIds = new Set<string>();
+  // Per-turn set of elicitation tool ids (AskUserQuestion etc.) — their
+  // tool_use + tool_result are visually redundant with the permission card
+  // and would otherwise render as "Tool error" with the raw answer JSON
+  // (the SDK has no "respond with answer" behavior, so 'answer' is delivered
+  // as a deny.message which it labels as an error). The permission card
+  // already shows the question + chosen answer cleanly.
+  let elicitationToolIds = new Set<string>();
+  const ELICITATION_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode', 'EnterPlanMode']);
   const open = (key: number): Turn => {
     cur = {
       key,
@@ -62,6 +70,7 @@ function groupTimeline(events: SessionEvent[]): TimelineItem[] {
       result: null,
     };
     todoToolIds = new Set<string>();
+    elicitationToolIds = new Set<string>();
     // We push the Turn *object* into items; later mutations on that same
     // object (text, activity, etc.) stay visible because items holds a ref.
     items.push(Object.assign(cur, { itemKind: 'turn' as const }) as TimelineItem);
@@ -91,12 +100,16 @@ function groupTimeline(events: SessionEvent[]): TimelineItem[] {
         if (e.name === 'TodoWrite') {
           t.lastTodo = e;
           todoToolIds.add(e.toolId);
+        } else if (ELICITATION_TOOLS.has(e.name)) {
+          // The permission card represents this fully — keep it out of activity.
+          elicitationToolIds.add(e.toolId);
         } else {
           t.activity.push(e);
         }
         break;
       case 'tool_result':
         if (todoToolIds.has(e.toolId)) break; // TodoWrite ack — shown via the card
+        if (elicitationToolIds.has(e.toolId)) break; // elicitation answer — shown via the card
         t.activity.push(e);
         break;
       case 'thinking':
