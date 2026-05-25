@@ -22,6 +22,9 @@ export interface SessionMeta {
   eventCount: number;
   /** Underlying Claude Code session id — used to resume after a server restart. */
   claudeSessionId: string | null;
+  /** Soft-deleted from the main session list — hidden by default, viewable
+   *  via the "Show archived" toggle, restorable via Unarchive. */
+  archived?: boolean;
   /** Slash commands the SDK exposes for this session (populated after init).
    *  Names come from the init message; description + argumentHint are
    *  enriched once the control-channel `supportedCommands()` RPC resolves. */
@@ -172,6 +175,7 @@ export type ClientMessage =
   | { t: 'interrupt'; sessionId: string }
   | { t: 'delete'; sessionId: string }
   | { t: 'rename'; sessionId: string; title: string }
+  | { t: 'archive'; sessionId: string; archived: boolean }
   | { t: 'permission'; sessionId: string; requestId: string; decision: PermissionDecision }
   | { t: 'setMode'; sessionId: string; permissionMode: PermissionMode };
 

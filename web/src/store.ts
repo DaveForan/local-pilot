@@ -237,6 +237,10 @@ class PilotStore {
     this.raw({ t: 'rename', sessionId, title });
   }
 
+  setArchived(sessionId: string, archived: boolean): void {
+    this.raw({ t: 'archive', sessionId, archived });
+  }
+
   resolvePermission(sessionId: string, requestId: string, decision: PermissionDecision): void {
     this.raw({ t: 'permission', sessionId, requestId, decision });
   }

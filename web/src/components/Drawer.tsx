@@ -163,6 +163,7 @@ export function Drawer({
   const [filter, setFilter] = useState('');
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [viewArchived, setViewArchived] = useState(false);
   const [account, setAccount] = useState<AccountInfo | null>(null);
 
   useEffect(() => {
@@ -173,12 +174,16 @@ export function Drawer({
       .catch(() => setAccount(null));
   }, [open]);
 
+  const archivedCount = sessions.filter((s) => s.archived).length;
+  const liveCount = sessions.length - archivedCount;
+  // Default view shows non-archived; user toggles to see / restore archived ones.
+  const visible = sessions.filter((s) => !!s.archived === viewArchived);
   const filtered = filter.trim()
-    ? sessions.filter((s) => {
+    ? visible.filter((s) => {
         const q = filter.trim().toLowerCase();
         return s.title.toLowerCase().includes(q) || s.cwd.toLowerCase().includes(q);
       })
-    : sessions;
+    : visible;
 
   const totals = active ? totalsFromEvents(activeEvents) : null;
   const ctxUsed = active ? currentContextTokens(activeEvents) : null;
@@ -216,45 +221,81 @@ export function Drawer({
             ＋ New session
           </button>
 
-          <div className="drawer-section-label">Sessions</div>
+          <div className="drawer-section-head">
+            <button
+              type="button"
+              className={`section-toggle ${!viewArchived ? 'on' : ''}`}
+              onClick={() => setViewArchived(false)}
+            >
+              Sessions {liveCount > 0 && <span className="count-pill">{liveCount}</span>}
+            </button>
+            <button
+              type="button"
+              className={`section-toggle ${viewArchived ? 'on' : ''}`}
+              onClick={() => setViewArchived(true)}
+              disabled={archivedCount === 0}
+              title={archivedCount === 0 ? 'No archived sessions' : 'View archived sessions'}
+            >
+              Archived{' '}
+              {archivedCount > 0 && <span className="count-pill">{archivedCount}</span>}
+            </button>
+          </div>
           <input
             className="drawer-filter"
             type="search"
-            placeholder="Filter sessions…"
+            placeholder={viewArchived ? 'Filter archived…' : 'Filter sessions…'}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
           <div className="session-list">
             {sessions.length === 0 && <div className="empty-hint">No sessions yet.</div>}
-            {sessions.length > 0 && filtered.length === 0 && (
+            {visible.length === 0 && sessions.length > 0 && (
+              <div className="empty-hint">
+                {viewArchived ? 'No archived sessions.' : 'No active sessions.'}
+              </div>
+            )}
+            {visible.length > 0 && filtered.length === 0 && (
               <div className="empty-hint">No sessions match.</div>
             )}
             {filtered.map((s) => {
               const st = STATUS[s.status];
               return (
-                <button
+                <div
                   key={s.id}
-                  className={`session-card ${s.id === activeId ? 'active' : ''} ${
+                  className={`session-card-wrap ${s.id === activeId ? 'active' : ''} ${
                     s.status === 'awaiting_permission' ? 'attention' : ''
                   }`}
-                  onClick={() => onSelect(s.id)}
                 >
-                  <span
-                    className={`status-dot ${s.status === 'running' ? 'pulse' : ''}`}
-                    style={{ background: st.color }}
-                    title={st.label}
-                  />
-                  <span className="session-meta">
-                    <span className="session-title">
-                      <span className="session-title-text">{s.title}</span>
-                      {s.status === 'awaiting_permission' && (
-                        <span className="needs-you-pill">Needs you</span>
-                      )}
+                  <button className="session-card" onClick={() => onSelect(s.id)}>
+                    <span
+                      className={`status-dot ${s.status === 'running' ? 'pulse' : ''}`}
+                      style={{ background: st.color }}
+                      title={st.label}
+                    />
+                    <span className="session-meta">
+                      <span className="session-title">
+                        <span className="session-title-text">{s.title}</span>
+                        {s.status === 'awaiting_permission' && (
+                          <span className="needs-you-pill">Needs you</span>
+                        )}
+                      </span>
+                      <span className="session-sub">{shortPath(s.cwd)}</span>
                     </span>
-                    <span className="session-sub">{shortPath(s.cwd)}</span>
-                  </span>
-                  <span className="session-time">{relativeTime(s.lastActivity)}</span>
-                </button>
+                    <span className="session-time">{relativeTime(s.lastActivity)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="session-action"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      store.setArchived(s.id, !s.archived);
+                    }}
+                    title={s.archived ? 'Restore from archive' : 'Archive (hide from list)'}
+                    aria-label={s.archived ? 'Restore session' : 'Archive session'}
+                  >
+                    {s.archived ? '↩' : '🗄'}
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -385,9 +426,19 @@ export function Drawer({
                 Export transcript
               </a>
               <button
+                className="btn btn-ghost drawer-archive"
+                onClick={() => store.setArchived(active.id, !active.archived)}
+              >
+                {active.archived ? '↩ Restore from archive' : '🗄 Archive session'}
+              </button>
+              <button
                 className="btn btn-ghost drawer-danger"
                 onClick={() => {
-                  if (window.confirm(`Delete session “${active.title}”?`)) {
+                  if (
+                    window.confirm(
+                      `Permanently delete session “${active.title}”? This can't be undone — use Archive to soft-hide instead.`,
+                    )
+                  ) {
                     store.remove(active.id);
                   }
                 }}

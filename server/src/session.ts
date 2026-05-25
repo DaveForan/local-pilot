@@ -137,6 +137,13 @@ export class Session {
     this.schedulePersist();
   }
 
+  setArchived(archived: boolean): void {
+    if (!!this.meta.archived === archived) return;
+    this.meta.archived = archived || undefined;
+    this.hooks.onMeta(this.meta);
+    this.schedulePersist();
+  }
+
   resolvePermission(requestId: string, decision: PermissionDecision): void {
     const entry = this.pending.get(requestId);
 

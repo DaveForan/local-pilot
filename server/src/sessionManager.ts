@@ -130,6 +130,10 @@ export class SessionManager {
     this.require(id).rename(title);
   }
 
+  setArchived(id: string, archived: boolean): void {
+    this.require(id).setArchived(archived);
+  }
+
   disposeAll(): void {
     for (const session of this.sessions.values()) session.dispose();
   }

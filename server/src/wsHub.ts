@@ -111,6 +111,9 @@ export class WsHub implements Broadcaster {
       case 'rename':
         this.manager.rename(msg.sessionId, msg.title);
         break;
+      case 'archive':
+        this.manager.setArchived(msg.sessionId, msg.archived);
+        break;
     }
   }
 

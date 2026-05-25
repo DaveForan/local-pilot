@@ -217,6 +217,55 @@ textarea {
   padding: 6px 4px;
 }
 
+/* Two-tab header for switching between active and archived session lists. */
+.drawer-section-head {
+  display: flex;
+  gap: 4px;
+  padding: 6px 0;
+}
+.section-toggle {
+  flex: 1;
+  background: transparent;
+  border: none;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-3);
+  padding: 8px 6px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: color 0.12s, background 0.12s;
+}
+.section-toggle:hover:not(:disabled) {
+  color: var(--text-1);
+  background: var(--bg-2);
+}
+.section-toggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.section-toggle.on {
+  color: var(--text-1);
+  background: var(--bg-2);
+}
+.count-pill {
+  background: var(--bg-3);
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  letter-spacing: 0;
+}
+.section-toggle.on .count-pill {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
 .drawer-foot {
   flex-shrink: 0;
   border-top: 1px solid var(--line-soft);
@@ -328,27 +377,60 @@ textarea {
   margin-bottom: 8px;
 }
 
+/* Wraps the click-to-select button + the inline archive action so both sit
+ * in one row but stop event propagation independently. */
+.session-card-wrap {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  transition: background 0.12s, border-color 0.12s;
+}
+.session-card-wrap:hover {
+  background: var(--bg-2);
+}
+.session-card-wrap.active {
+  background: var(--bg-2);
+  border-color: var(--accent);
+}
+.session-card-wrap.attention {
+  border-color: var(--warn);
+}
+.session-card-wrap .session-action {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.session-card-wrap:hover .session-action,
+.session-card-wrap:focus-within .session-action {
+  opacity: 1;
+}
+
 .session-card {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px;
-  border: 1px solid transparent;
+  flex: 1;
+  min-width: 0;
+  border: none;
   border-radius: var(--radius);
   background: transparent;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s, border-color 0.12s;
 }
-.session-card:hover {
-  background: var(--bg-2);
+
+.session-action {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 14px;
+  color: var(--text-3);
+  border-radius: var(--radius);
 }
-.session-card.active {
-  background: var(--bg-2);
-  border-color: var(--accent);
-}
-.session-card.attention {
-  border-color: var(--warn);
+.session-action:hover {
+  color: var(--text-1);
+  background: var(--bg-3);
 }
 
 .session-meta {
