@@ -1,8 +1,30 @@
-# local-pilot
+# local-pilot · [docs ↗](https://daveforan.github.io/local-pilot/)
+
+```
+                   ___
+                  |   |
+                  | o |              ◀── you, anywhere on the tailnet
+                  |___|
+                 /|   |\
+                / |   | \            WebSocket + HTTPS via tailscale serve
+               /  |   |  \           ("the strings")
+              /   |   |   \
+          .--+----+---+----+--.
+          |                    |
+          |    ●          ●    |     ◀── claude code, doing the work
+          |        ___         |        in any directory you point it at
+          |        \_/         |
+          '--+--+------+--+----'
+             |  |      |  |
+             |  |      |  |
+            _|  |_    _|  |_
+```
 
 Run and control **Claude Code** sessions from a web browser. Designed to be
 hosted on a Tailscale node so you can drive Claude Code from any device —
 phone, tablet, laptop — without holding an SSH connection open.
+
+📚 **[Documentation & screenshots →](https://daveforan.github.io/local-pilot/)**
 
 ## What it is
 
