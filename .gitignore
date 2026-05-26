@@ -9,3 +9,6 @@ data/sessions/
 data/*.json
 .vite/
 coverage/
+# Playwright MCP scratch dir — page snapshots may contain session
+# content or account info; never commit.
+.playwright-mcp/
