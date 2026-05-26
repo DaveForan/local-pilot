@@ -1,0 +1,11 @@
+title: local-pilot
+description: Run and control Claude Code from any browser on your tailnet.
+theme: jekyll-theme-cayman
+show_downloads: false
+plugins:
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+  collections: true
+include:
+  - CONTRIBUTING.md

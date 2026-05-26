@@ -279,19 +279,45 @@ export function createApiRouter(manager: SessionManager) {
     const tmpFile = path.join(os.tmpdir(), `lp-import-${Date.now()}.tar.gz`);
     await fs.writeFile(tmpFile, body);
     try {
-      // Validate first — refuse to extract a corrupt archive.
-      await new Promise<void>((resolve, reject) => {
+      // Validate first — refuse to extract a corrupt archive *or* one with
+      // path-traversal entries (`../foo`, absolute paths) that would escape
+      // the data dir.
+      const listing = await new Promise<string>((resolve, reject) => {
         const probe = spawn('tar', ['-tzf', tmpFile]);
+        let out = '';
         let err = '';
+        probe.stdout.on('data', (b: Buffer) => (out += b.toString()));
         probe.stderr.on('data', (b: Buffer) => (err += b.toString()));
         probe.on('close', (code) =>
-          code === 0 ? resolve() : reject(new Error(err || 'invalid archive')),
+          code === 0 ? resolve(out) : reject(new Error(err || 'invalid archive')),
         );
       });
-      // Extract into the data dir. -p preserves modes; we deliberately let
-      // it overwrite existing files — that's the point of restore.
+      const entries = listing.split('\n').map((s) => s.trim()).filter(Boolean);
+      const unsafe = entries.find(
+        (name) =>
+          name.startsWith('/') ||
+          name.startsWith('../') ||
+          name.split('/').includes('..'),
+      );
+      if (unsafe) {
+        res
+          .status(400)
+          .json({ error: `Archive contains unsafe path: ${unsafe}` });
+        return;
+      }
+      // Extract into the data dir with belt-and-suspenders: --no-absolute-names
+      // and --no-overwrite-dir block the same attacks at the tar level.
+      // -p preserves modes; we deliberately let it overwrite files — that's
+      // the point of restore.
       await new Promise<void>((resolve, reject) => {
-        const extract = spawn('tar', ['-xzpf', tmpFile, '-C', paths.data]);
+        const extract = spawn('tar', [
+          '-xzpf',
+          tmpFile,
+          '-C',
+          paths.data,
+          '--no-absolute-names',
+          '--no-overwrite-dir',
+        ]);
         let err = '';
         extract.stderr.on('data', (b: Buffer) => (err += b.toString()));
         extract.on('close', (code) =>
