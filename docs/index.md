@@ -130,30 +130,42 @@ on the left edge; everything else hides behind it.
 
 <div class="ss-grid" markdown="0">
   <figure>
-    <img src="screenshots/mobile-chat.png" alt="Mobile — chat view"/>
+    <img class="ss-img" src="screenshots/mobile-chat.png" alt="Mobile — chat view"
+         onerror="this.classList.add('missing');this.alt='📱 mobile-chat.png';"/>
     <figcaption>Chat view: clean paper-tone bubbles, per-turn activity block, send/voice/image buttons in the composer.</figcaption>
   </figure>
   <figure>
-    <img src="screenshots/mobile-drawer.png" alt="Mobile — session drawer"/>
+    <img class="ss-img" src="screenshots/mobile-drawer.png" alt="Mobile — session drawer"
+         onerror="this.classList.add('missing');this.alt='📱 mobile-drawer.png';"/>
     <figcaption>Session drawer: tap the floating hamburger to slide it in. Switch sessions, see model + context usage + cost, archive/rename, change permission mode.</figcaption>
   </figure>
   <figure>
-    <img src="screenshots/mobile-elicitation.png" alt="Mobile — elicitation modal"/>
+    <img class="ss-img" src="screenshots/mobile-elicitation.png" alt="Mobile — elicitation modal"
+         onerror="this.classList.add('missing');this.alt='📱 mobile-elicitation.png';"/>
     <figcaption>Elicitation modal: when Claude asks a question or wants permission, the modal pops over everything so you can't miss it. Multi-choice answers tap-to-pick.</figcaption>
   </figure>
   <figure>
-    <img src="screenshots/mobile-voice.png" alt="Mobile — conversation mode"/>
+    <img class="ss-img" src="screenshots/mobile-voice.png" alt="Mobile — conversation mode"
+         onerror="this.classList.add('missing');this.alt='📱 mobile-voice.png';"/>
     <figcaption>Hands-free conversation mode: mic listens for utterances, replies are read back through Piper TTS, the loop rearms automatically.</figcaption>
   </figure>
   <figure>
-    <img src="screenshots/mobile-activity-log.png" alt="Mobile — activity log"/>
+    <img class="ss-img" src="screenshots/mobile-activity-log.png" alt="Mobile — activity log"
+         onerror="this.classList.add('missing');this.alt='📱 mobile-activity-log.png';"/>
     <figcaption>Activity log: every command, file edit and tool result Claude ran during a turn. File edits render as proper diffs.</figcaption>
   </figure>
   <figure>
-    <img src="screenshots/mobile-settings.png" alt="Mobile — settings"/>
+    <img class="ss-img" src="screenshots/mobile-settings.png" alt="Mobile — settings"
+         onerror="this.classList.add('missing');this.alt='📱 mobile-settings.png';"/>
     <figcaption>Settings: MCP servers, hooks, plugins, voice picker, push notifications, security (token rotation + backup/restore).</figcaption>
   </figure>
 </div>
+
+<p class="ss-note"><em>Screenshots will appear here once they're added to
+<code>docs/screenshots/</code>. Until then each tile shows a placeholder
+with the expected filename — see
+<a href="https://github.com/DaveForan/local-pilot/blob/main/docs/screenshots/README.md">docs/screenshots/README.md</a>
+for what to capture.</em></p>
 
 <style>
 .ss-grid {
@@ -176,11 +188,43 @@ on the left edge; everything else hides behind it.
   border-bottom: 1px solid #e1e4e8;
   background: #fff;
 }
+/* When the file is missing, hide the broken-image icon and show a clean
+ * placeholder block with the filename instead. */
+.ss-grid img.missing {
+  aspect-ratio: 9 / 16;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      #f6f8fa,
+      #f6f8fa 12px,
+      #eef0f3 12px,
+      #eef0f3 24px
+    );
+  color: #6a737d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Cross-browser way to keep `alt` text visible inside the placeholder
+   * (hides the broken-icon glyph on Firefox / Webkit). */
+  text-indent: 0;
+  object-fit: contain;
+}
 .ss-grid figcaption {
   padding: 10px 14px;
   font-size: 13px;
   line-height: 1.45;
   color: #444;
+}
+.ss-note {
+  font-size: 13px;
+  color: #6a737d;
+  background: #f6f8fa;
+  border-left: 3px solid #d1d5da;
+  padding: 10px 14px;
+  border-radius: 4px;
 }
 </style>
 
