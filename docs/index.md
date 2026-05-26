@@ -30,14 +30,25 @@ SSH session held open, no terminal emulator.
   self-hosted Piper. A conversation mode loops it hands-free.
 - **Push notifications** when a session needs a decision or finishes a
   turn — so you can walk away and come back when there's something to do.
-- **Configurable.** MCP servers, plugins, slash-command discovery,
-  hooks (Pre/PostToolUse, Stop, UserPromptSubmit, etc.), output style.
-- **Backup + restore** in one click. **Token rotation** in one click.
 
-## Quick install
+---
 
-You need: Node 20+, the `claude` CLI installed and logged in, Linux with
-`systemd` (for the service install), and Tailscale on the host.
+## Setup
+
+### Prerequisites
+
+You need all of these on the **host machine** (the box you're running
+local-pilot on — usually a Linux server, NAS, or workstation):
+
+| Requirement | Why | Install |
+| --- | --- | --- |
+| **Node 20+** | Runs the server and builds the UI | `nvm install 20`, or your distro's package manager |
+| **`claude` CLI** | local-pilot reuses its login & config — you don't sign into Anthropic again | [Anthropic install docs](https://docs.claude.com/en/docs/claude-code/setup) — then run `claude` once and log in |
+| **`systemd`** | For the recommended `--user` service install | Already on most Linux distros |
+| **Tailscale** | The only network path into the app | `curl -fsSL https://tailscale.com/install.sh \| sh` |
+| **`ffmpeg`** _(optional)_ | Only needed for voice input | `apt install ffmpeg` / `brew install ffmpeg` |
+
+### Install
 
 ```sh
 git clone https://github.com/DaveForan/local-pilot
@@ -46,28 +57,134 @@ npm install
 npm run service:install
 ```
 
-That builds the UI, installs a systemd `--user` service, and prints your
-access token. The service binds **`127.0.0.1` only** — never exposed on
-your LAN.
+That command does four things:
 
-Front it with Tailscale to reach it from your other devices:
+1. Builds the React UI into `web/dist`.
+2. Installs a **systemd `--user` service** named `local-pilot`.
+3. Generates a random access token into `~/.local-pilot/token` (mode `0600`)
+   and **prints it to the terminal** — copy it somewhere safe, you'll
+   sign in with it on each device.
+4. Starts the service. It binds **`127.0.0.1` only** — never exposed on
+   your LAN.
+
+Want it to keep running after you log out and across reboots?
+
+```sh
+sudo loginctl enable-linger "$USER"
+```
+
+### Expose it on your tailnet
 
 ```sh
 sudo tailscale serve --bg 8787
 ```
 
-Then open `https://<your-host>.<tailnet>.ts.net` from any tailnet device
-and sign in with the token.
+That gives you an HTTPS URL like `https://<your-host>.<tailnet>.ts.net`.
+The HTTPS is what makes push notifications and microphone access work in
+the browser — both are blocked on plain HTTP except on `localhost`.
 
-## Voice (optional)
+### Sign in
+
+1. From any tailnet device, open `https://<your-host>.<tailnet>.ts.net`.
+2. Paste the token printed at install time.
+3. The token is exchanged for an `HttpOnly` session cookie — the token
+   itself is never stored in the browser.
+
+Lost the token? It's at `~/.local-pilot/token` on the host. Or rotate it
+from **Settings → Security → Rotate access token**.
+
+### Add to your phone home screen
+
+Open the URL in **Safari (iOS)** or **Chrome (Android)** → share menu →
+**Add to Home Screen**. That gives you a full-screen icon that looks and
+behaves like a native app, and means push notifications land in your
+notification tray when a session needs you.
+
+### Voice (optional)
 
 Both halves of the conversation loop run on-device — no paid services:
 
 ```sh
-npm run whisper:install   # speech-to-text (whisper.cpp)
+npm run whisper:install   # speech-to-text (whisper.cpp, base.en model)
 npm run piper:install     # text-to-speech (Piper neural voices)
 systemctl --user restart local-pilot
 ```
+
+Without these, the browser's built-in Web Speech API is used as a fallback
+— voice still works, just less accurate and more robotic.
+
+### Common commands
+
+```sh
+systemctl --user status local-pilot      # is it running?
+systemctl --user restart local-pilot     # restart after config changes
+journalctl --user -u local-pilot -f      # tail logs
+```
+
+---
+
+## Mobile interface
+
+The UI is built mobile-first. A floating hamburger sits over the chat
+on the left edge; everything else hides behind it.
+
+<div class="ss-grid" markdown="0">
+  <figure>
+    <img src="screenshots/mobile-chat.png" alt="Mobile — chat view"/>
+    <figcaption>Chat view: clean paper-tone bubbles, per-turn activity block, send/voice/image buttons in the composer.</figcaption>
+  </figure>
+  <figure>
+    <img src="screenshots/mobile-drawer.png" alt="Mobile — session drawer"/>
+    <figcaption>Session drawer: tap the floating hamburger to slide it in. Switch sessions, see model + context usage + cost, archive/rename, change permission mode.</figcaption>
+  </figure>
+  <figure>
+    <img src="screenshots/mobile-elicitation.png" alt="Mobile — elicitation modal"/>
+    <figcaption>Elicitation modal: when Claude asks a question or wants permission, the modal pops over everything so you can't miss it. Multi-choice answers tap-to-pick.</figcaption>
+  </figure>
+  <figure>
+    <img src="screenshots/mobile-voice.png" alt="Mobile — conversation mode"/>
+    <figcaption>Hands-free conversation mode: mic listens for utterances, replies are read back through Piper TTS, the loop rearms automatically.</figcaption>
+  </figure>
+  <figure>
+    <img src="screenshots/mobile-activity-log.png" alt="Mobile — activity log"/>
+    <figcaption>Activity log: every command, file edit and tool result Claude ran during a turn. File edits render as proper diffs.</figcaption>
+  </figure>
+  <figure>
+    <img src="screenshots/mobile-settings.png" alt="Mobile — settings"/>
+    <figcaption>Settings: MCP servers, hooks, plugins, voice picker, push notifications, security (token rotation + backup/restore).</figcaption>
+  </figure>
+</div>
+
+<style>
+.ss-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  margin: 22px 0;
+}
+.ss-grid figure {
+  margin: 0;
+  background: #f6f8fa;
+  border: 1px solid #e1e4e8;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ss-grid img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-bottom: 1px solid #e1e4e8;
+  background: #fff;
+}
+.ss-grid figcaption {
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #444;
+}
+</style>
+
+---
 
 ## Security model
 
@@ -89,9 +206,7 @@ systemctl --user restart local-pilot
 > `tailscale serve` gate limits *who can even reach* the login page; the
 > token gates the rest.
 
-## Screenshots
-
-_(Add your own to `docs/screenshots/` — referenced here.)_
+---
 
 ## Configuration
 
@@ -107,6 +222,16 @@ launching the service:
 | `LOCAL_PILOT_TOKEN` | _(auto-generated)_ | Override the access token |
 | `LOCAL_PILOT_WHISPER_MODEL` | `base.en` | Whisper model |
 | `LOCAL_PILOT_PIPER_VOICE` | `en_US-amy-medium` | Piper voice |
+
+To set them for the systemd service, edit `~/.config/systemd/user/local-pilot.service`
+and add `Environment="VAR=value"` lines under `[Service]`, then:
+
+```sh
+systemctl --user daemon-reload
+systemctl --user restart local-pilot
+```
+
+---
 
 ## Architecture
 
@@ -129,6 +254,8 @@ launching the service:
 │   project settings, CLAUDE.md.                           │
 └──────────────────────────────────────────────────────────┘
 ```
+
+---
 
 ## Project status
 
