@@ -40,7 +40,7 @@ You need: Node 20+, the `claude` CLI installed and logged in, Linux with
 `systemd` (for the service install), and Tailscale on the host.
 
 ```sh
-git clone https://github.com/<your-fork>/local-pilot
+git clone https://github.com/DaveForan/local-pilot
 cd local-pilot
 npm install
 npm run service:install
@@ -132,12 +132,12 @@ launching the service:
 
 ## Project status
 
-v1 is feature-complete. See the [README](https://github.com/<your-fork>/local-pilot)
+v1 is feature-complete. See the [README](https://github.com/DaveForan/local-pilot)
 on GitHub for the changelog.
 
 ## License
 
-[MIT](https://github.com/<your-fork>/local-pilot/blob/main/LICENSE).
+[MIT](https://github.com/DaveForan/local-pilot/blob/main/LICENSE).
 
 ---
 
