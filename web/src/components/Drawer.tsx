@@ -288,6 +288,21 @@ export function Drawer({
                     className="session-action"
                     onClick={(e) => {
                       e.stopPropagation();
+                      const next = window.prompt('Rename session', s.title);
+                      if (next != null && next.trim() && next.trim() !== s.title) {
+                        store.rename(s.id, next.trim());
+                      }
+                    }}
+                    title="Rename"
+                    aria-label="Rename session"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    className="session-action"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       store.setArchived(s.id, !s.archived);
                     }}
                     title={s.archived ? 'Restore from archive' : 'Archive (hide from list)'}
@@ -324,9 +339,12 @@ export function Drawer({
                   type="button"
                   className="cs-title"
                   onClick={startRename}
-                  title="Tap to rename"
+                  title="Click to rename this session"
                 >
-                  {active.title}
+                  <span className="cs-title-text">{active.title}</span>
+                  <span className="cs-title-edit" aria-hidden="true">
+                    ✎
+                  </span>
                 </button>
               )}
               <div className="cs-row">
