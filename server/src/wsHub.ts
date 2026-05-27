@@ -4,6 +4,11 @@ import type { SessionManager } from './sessionManager';
 import type { ClientMessage, ServerMessage } from './protocol';
 import { hasValidSession } from './auth';
 
+/** How many events to send per `history` / `historyChunk` page. ~200 events
+ *  comfortably covers tens of turns and keeps the WS payload under ~1 MB
+ *  even with long tool results, while still being one round trip. */
+const HISTORY_PAGE_SIZE = 200;
+
 /** What SessionManager needs to push messages out to browsers. */
 export interface Broadcaster {
   toAll(msg: ServerMessage): void;
@@ -67,11 +72,13 @@ export class WsHub implements Broadcaster {
       case 'create': {
         const session = this.manager.create(msg);
         this.attachments.get(ws)?.add(session.meta.id);
+        // Brand-new session: no events, no older history.
         this.send(ws, {
           t: 'history',
           sessionId: session.meta.id,
           meta: session.meta,
           events: session.events,
+          hasMore: false,
         });
         break;
       }
@@ -82,17 +89,45 @@ export class WsHub implements Broadcaster {
           return;
         }
         this.attachments.get(ws)?.add(msg.sessionId);
+        // Only send the most recent slice so initial load stays fast even
+        // when the session has thousands of events. Client requests older
+        // slices via `loadEarlier` when the user scrolls back.
+        const all = session.events;
+        const sliced = all.slice(-HISTORY_PAGE_SIZE);
         this.send(ws, {
           t: 'history',
           sessionId: session.meta.id,
           meta: session.meta,
-          events: session.events,
+          events: sliced,
+          hasMore: sliced.length < all.length,
         });
         break;
       }
       case 'detach':
         this.attachments.get(ws)?.delete(msg.sessionId);
         break;
+      case 'loadEarlier': {
+        const session = this.manager.get(msg.sessionId);
+        if (!session) return;
+        const all = session.events;
+        // Find index of first event with seq >= beforeSeq; we slice the
+        // chunk immediately preceding it.
+        let end = all.length;
+        for (let i = 0; i < all.length; i++) {
+          if (all[i].seq >= msg.beforeSeq) {
+            end = i;
+            break;
+          }
+        }
+        const start = Math.max(0, end - HISTORY_PAGE_SIZE);
+        this.send(ws, {
+          t: 'historyChunk',
+          sessionId: msg.sessionId,
+          events: all.slice(start, end),
+          hasMore: start > 0,
+        });
+        break;
+      }
       case 'input':
         this.manager.input(msg.sessionId, msg.text, msg.images);
         break;

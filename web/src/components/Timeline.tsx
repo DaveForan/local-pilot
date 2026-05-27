@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { SessionEvent, SessionStatus, ChatImage } from '../protocol';
 import { PermissionCard } from './PermissionCard';
 import { ActivityLog } from './ActivityLog';
@@ -7,6 +7,7 @@ import { Reply } from './Reply';
 import { LightboxImage } from './ImageLightbox';
 import { RewindDialog } from './RewindDialog';
 import { speak, stopSpeaking, speechOutputSupported } from '../speech';
+import { store } from '../store';
 
 type ActivityEvent = Extract<
   SessionEvent,
@@ -131,23 +132,32 @@ interface Props {
   sessionId: string;
   events: SessionEvent[];
   status: SessionStatus;
+  /** Server-paginated: true when older events than the loaded slice exist. */
+  hasMore: boolean;
+  /** True while a loadEarlier request is in flight. */
+  loadingEarlier: boolean;
   /** When on, new replies are read aloud automatically. */
   voiceMode: boolean;
   /** Called once a reply has finished being read aloud. */
   onReplySpoken: () => void;
 }
 
-const INITIAL_VISIBLE_TURNS = 50;
-const MORE_PER_CLICK = 50;
-
-export function Timeline({ sessionId, events, status, voiceMode, onReplySpoken }: Props) {
+export function Timeline({
+  sessionId,
+  events,
+  status,
+  hasMore,
+  loadingEarlier,
+  voiceMode,
+  onReplySpoken,
+}: Props) {
   const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [logKey, setLogKey] = useState<number | null>(null);
   const [rewindTarget, setRewindTarget] = useState<{
     userUuid: string;
     userText: string;
   } | null>(null);
-  const [visible, setVisible] = useState(INITIAL_VISIBLE_TURNS);
   const spokenRef = useRef<number>(-1);
   const items = useMemo(() => groupTimeline(events), [events]);
   const turns = useMemo(
@@ -156,16 +166,49 @@ export function Timeline({ sessionId, events, status, voiceMode, onReplySpoken }
   );
   // Look the open turn up by key each render so the log keeps updating live.
   const logTurn = logKey == null ? null : turns.find((t) => t.key === logKey) ?? null;
-
-  // For long sessions, only keep the most recent N items in the DOM. The
-  // "Load earlier" header expands the window on demand.
-  const hiddenCount = Math.max(0, items.length - visible);
-  const shownItems = hiddenCount > 0 ? items.slice(hiddenCount) : items;
   const lastTurnKey = turns.length > 0 ? turns[turns.length - 1].key : null;
 
+  // --- scroll-position preservation for "Load earlier" ---------------------
+  // When older events get prepended, the natural behavior is for the viewport
+  // to stay anchored on its current scrollTop — which means the user's view
+  // visibly jumps "down" because content was added above. Capture the scroll
+  // metrics just before the prepend and restore the offset right after.
+  const oldestSeq = events.length > 0 ? events[0].seq : null;
+  const prependAnchor = useRef<{ seq: number; scrollHeight: number; scrollTop: number } | null>(
+    null,
+  );
+  useLayoutEffect(() => {
+    const anchor = prependAnchor.current;
+    if (!anchor || !scrollRef.current) return;
+    if (oldestSeq != null && oldestSeq < anchor.seq) {
+      // Content was prepended above us — shift scrollTop down by the height
+      // delta so the viewport stays anchored on the same first-visible turn.
+      const delta = scrollRef.current.scrollHeight - anchor.scrollHeight;
+      scrollRef.current.scrollTop = anchor.scrollTop + delta;
+    }
+    prependAnchor.current = null;
+  }, [oldestSeq]);
+
+  const onLoadEarlier = (): void => {
+    if (!scrollRef.current) return;
+    prependAnchor.current = {
+      seq: oldestSeq ?? Number.MAX_SAFE_INTEGER,
+      scrollHeight: scrollRef.current.scrollHeight,
+      scrollTop: scrollRef.current.scrollTop,
+    };
+    store.loadEarlier(sessionId);
+  };
+
+  // Auto-scroll to bottom only when a *new* event lands (not when older ones
+  // are prepended via loadEarlier).
+  const lastSeqRef = useRef<number>(-1);
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [events.length, status]);
+    const lastSeq = events.length > 0 ? events[events.length - 1].seq : -1;
+    if (lastSeq > lastSeqRef.current) {
+      lastSeqRef.current = lastSeq;
+      endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [events, status]);
 
   // Conversation mode: read each newly-completed reply aloud.
   useEffect(() => {
@@ -191,20 +234,20 @@ export function Timeline({ sessionId, events, status, voiceMode, onReplySpoken }
   }, [turns, voiceMode, onReplySpoken]);
 
   return (
-    <div className="timeline">
+    <div className="timeline" ref={scrollRef}>
       {events.length === 0 && (
         <div className="empty-hint center">Send a message to start the session.</div>
       )}
-      {hiddenCount > 0 && (
+      {hasMore && (
         <button
           className="load-earlier"
-          onClick={() => setVisible((v) => v + MORE_PER_CLICK)}
+          onClick={onLoadEarlier}
+          disabled={loadingEarlier}
         >
-          Load {Math.min(hiddenCount, MORE_PER_CLICK)} earlier
-          {hiddenCount > MORE_PER_CLICK ? ` of ${hiddenCount}` : ''}
+          {loadingEarlier ? 'Loading…' : '↑ Load earlier'}
         </button>
       )}
-      {shownItems.map((item) => {
+      {items.map((item) => {
         if (item.itemKind === 'compaction') {
           return <CompactionDivider key={`c-${item.seq}`} event={item} />;
         }

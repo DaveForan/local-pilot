@@ -171,6 +171,8 @@ export type ClientMessage =
     }
   | { t: 'attach'; sessionId: string }
   | { t: 'detach'; sessionId: string }
+  /** Ask the server for events older than `beforeSeq` — paginated history scroll. */
+  | { t: 'loadEarlier'; sessionId: string; beforeSeq: number }
   | { t: 'input'; sessionId: string; text: string; images?: ChatImage[] }
   | { t: 'interrupt'; sessionId: string }
   | { t: 'delete'; sessionId: string }
@@ -183,7 +185,21 @@ export type ClientMessage =
 export type ServerMessage =
   | { t: 'sessions'; sessions: SessionMeta[] }
   | { t: 'session'; session: SessionMeta }
-  | { t: 'history'; sessionId: string; meta: SessionMeta; events: SessionEvent[] }
+  | {
+      t: 'history';
+      sessionId: string;
+      meta: SessionMeta;
+      /** Most recent slice of the session's events. */
+      events: SessionEvent[];
+      /** True if more events exist before the first event in this slice. */
+      hasMore: boolean;
+    }
+  | {
+      t: 'historyChunk';
+      sessionId: string;
+      events: SessionEvent[];
+      hasMore: boolean;
+    }
   | { t: 'event'; sessionId: string; event: SessionEvent }
   | { t: 'permission'; request: PermissionRequest }
   | { t: 'deleted'; sessionId: string }

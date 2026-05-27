@@ -26,6 +26,10 @@ export interface PilotState {
   sessions: SessionMeta[];
   /** Timeline events keyed by session id. */
   events: Record<string, SessionEvent[]>;
+  /** Per-session flag: true when older events than the loaded slice exist. */
+  hasMore: Record<string, boolean>;
+  /** Per-session flag: a `loadEarlier` request is in flight. */
+  loadingEarlier: Record<string, boolean>;
   activeId: string | null;
   error: string | null;
   /** Saved prompts, loaded once over REST (not the WebSocket). */
@@ -43,6 +47,8 @@ class PilotStore {
     retryCount: 0,
     sessions: [],
     events: {},
+    hasMore: {},
+    loadingEarlier: {},
     activeId: null,
     error: null,
     snippets: [],
@@ -161,9 +167,27 @@ class PilotStore {
         this.patch({
           sessions: sortSessions([...rest, msg.meta]),
           events: { ...this.state.events, [msg.sessionId]: msg.events },
+          hasMore: { ...this.state.hasMore, [msg.sessionId]: msg.hasMore },
+          loadingEarlier: { ...this.state.loadingEarlier, [msg.sessionId]: false },
           activeId: this.selectOnHistory ? msg.sessionId : this.state.activeId,
         });
         this.selectOnHistory = false;
+        break;
+      }
+      case 'historyChunk': {
+        // Prepend the older slice; Timeline preserves scroll-position so the
+        // viewport stays anchored on whatever the user was looking at.
+        const existing = this.state.events[msg.sessionId] ?? [];
+        const seen = new Set(existing.map((e) => e.seq));
+        const fresh = msg.events.filter((e) => !seen.has(e.seq));
+        this.patch({
+          events: {
+            ...this.state.events,
+            [msg.sessionId]: [...fresh, ...existing].sort((a, b) => a.seq - b.seq),
+          },
+          hasMore: { ...this.state.hasMore, [msg.sessionId]: msg.hasMore },
+          loadingEarlier: { ...this.state.loadingEarlier, [msg.sessionId]: false },
+        });
         break;
       }
       case 'event':
@@ -205,6 +229,19 @@ class PilotStore {
     const id = this.state.activeId;
     if (!id) return;
     this.raw({ t: 'attach', sessionId: id });
+  }
+
+  /** Request the page of events immediately older than the oldest one we have. */
+  loadEarlier(sessionId: string): void {
+    if (this.state.loadingEarlier[sessionId]) return;
+    if (this.state.hasMore[sessionId] === false) return;
+    const list = this.state.events[sessionId] ?? [];
+    if (list.length === 0) return;
+    const beforeSeq = list[0].seq;
+    this.patch({
+      loadingEarlier: { ...this.state.loadingEarlier, [sessionId]: true },
+    });
+    this.raw({ t: 'loadEarlier', sessionId, beforeSeq });
   }
 
   create(opts: {

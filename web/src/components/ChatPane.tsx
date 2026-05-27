@@ -6,7 +6,7 @@ import { Composer, type ComposerHandle } from './Composer';
 
 /** The chat view — just the conversation. Session chrome lives in the drawer. */
 export function ChatPane({ session }: { session: SessionMeta | null }) {
-  const { events } = usePilot();
+  const { events, hasMore, loadingEarlier } = usePilot();
   const [voiceMode, setVoiceMode] = useState(false);
   const composerRef = useRef<ComposerHandle>(null);
 
@@ -30,6 +30,8 @@ export function ChatPane({ session }: { session: SessionMeta | null }) {
         sessionId={session.id}
         events={list}
         status={session.status}
+        hasMore={hasMore[session.id] ?? false}
+        loadingEarlier={loadingEarlier[session.id] ?? false}
         voiceMode={voiceMode}
         // When a reply finishes being read aloud, reopen the mic to continue.
         onReplySpoken={() => composerRef.current?.beginVoiceReply()}
