@@ -124,8 +124,12 @@ export function App() {
     }
   }, [sessions]);
 
-  // Remember the active session across reloads.
+  // Remember the active session across reloads — but only after the restore
+  // effect has had its chance. Otherwise the initial render (activeId=null,
+  // sessions=[] not yet received) would clobber the saved id before we ever
+  // read it, leaving the user on "No session open" after every refresh.
   useEffect(() => {
+    if (!restoreTried.current) return;
     writeSavedActive(activeId);
   }, [activeId]);
 
