@@ -35,6 +35,8 @@ export interface SessionHooks {
   persist(session: Session): void;
   /** Cache the account-wide model list any session learns about. */
   onModels(models: ModelInfo[]): void;
+  /** Cache the slash commands any session learns about (for the global list). */
+  onSlashCommands(commands: SlashCommand[]): void;
   /** Cache the authenticated account info. */
   onAccount(account: AccountInfo): void;
 }
@@ -126,6 +128,17 @@ export class Session {
     this.meta.permissionMode = mode;
     this.hooks.onMeta(this.meta);
     void this.runner?.setMode(mode);
+    this.schedulePersist();
+  }
+
+  /** Switch the session's model. Updates meta (so the UI reflects it and the
+   *  next runner start uses it) and, if a runner is live, switches mid-session
+   *  over the SDK control channel. */
+  setModel(model: string | null): void {
+    if (this.meta.model === model) return;
+    this.meta.model = model;
+    this.hooks.onMeta(this.meta);
+    void this.runner?.setModel(model);
     this.schedulePersist();
   }
 
@@ -268,6 +281,7 @@ export class Session {
           this.meta.slashCommands = event.commands;
           this.hooks.onMeta(this.meta);
         }
+        this.hooks.onSlashCommands(event.commands);
         break;
       }
       case 'models': {

@@ -97,10 +97,21 @@ export function createApiRouter(manager: SessionManager) {
   );
 
   // --- model catalog -------------------------------------------------------
-  // The SDK reports this list over the control channel once a runner starts;
-  // the manager caches the latest. Empty until at least one session has run.
-  router.get('/models', (_req, res) => {
+  // The SDK is the source of truth for which models the account can use. We
+  // probe it once (ensureCatalogs) so this returns the real list even before
+  // any interactive session has run — that's what lets the New Session dialog
+  // and the in-session switcher offer e.g. Opus 4.6.
+  router.get('/models', async (_req, res) => {
+    await manager.ensureCatalogs();
     res.json(manager.models());
+  });
+
+  // --- slash command catalog -----------------------------------------------
+  // Same discovery probe surfaces the account's slash commands (with the rich
+  // descriptions the init message lacks) before the first session.
+  router.get('/commands', async (_req, res) => {
+    await manager.ensureCatalogs();
+    res.json(manager.slashCommands());
   });
 
   // --- authenticated account info ------------------------------------------

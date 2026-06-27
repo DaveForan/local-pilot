@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
-import type { SessionMeta, SessionEvent, PermissionMode, AccountInfo } from '../protocol';
+import type {
+  SessionMeta,
+  SessionEvent,
+  PermissionMode,
+  AccountInfo,
+  ModelInfo,
+} from '../protocol';
 import type { ConnectionState } from '../store';
 import { store } from '../store';
+import { mergeModels } from '../models';
 import { relativeTime, shortPath } from '../format';
 import { STATUS } from './status';
 import type { Theme } from '../theme';
@@ -165,6 +172,7 @@ export function Drawer({
   const [renameValue, setRenameValue] = useState('');
   const [viewArchived, setViewArchived] = useState(false);
   const [account, setAccount] = useState<AccountInfo | null>(null);
+  const [models, setModels] = useState<ModelInfo[]>(() => mergeModels([]));
 
   useEffect(() => {
     if (!open) return;
@@ -172,6 +180,15 @@ export function Drawer({
       .account()
       .then((r) => setAccount(r.account))
       .catch(() => setAccount(null));
+    // SDK account aliases merged with explicit version pins (e.g. Opus 4.6),
+    // so the in-session switcher offers the same choices as the new-session
+    // dialog. Falls back to the curated list until discovery resolves.
+    api
+      .models()
+      .then((list) => setModels(mergeModels(list)))
+      .catch(() => {
+        /* keep fallback */
+      });
   }, [open]);
 
   const archivedCount = sessions.filter((s) => s.archived).length;
@@ -357,10 +374,24 @@ export function Drawer({
                   {shortPath(active.cwd, 28)}
                 </span>
               </div>
-              <div className="cs-row">
+              <label className="cs-field cs-field-model">
                 <span>Model</span>
-                <span className="cs-mono">{activeModel ?? 'not yet started'}</span>
-              </div>
+                <select
+                  value={activeModel ?? ''}
+                  onChange={(e) => store.setModel(active.id, e.target.value || null)}
+                  title="Switch the model. Takes effect on the next turn — mid-session if it's already running."
+                >
+                  <option value="">Default</option>
+                  {(activeModel && !models.some((m) => m.value === activeModel)
+                    ? [{ value: activeModel, displayName: activeModel, description: '' }, ...models]
+                    : models
+                  ).map((m) => (
+                    <option key={m.value} value={m.value} title={m.description}>
+                      {m.displayName}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="cs-field cs-field-mode">
                 <span>Permission mode</span>
                 <select

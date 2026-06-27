@@ -179,7 +179,8 @@ export type ClientMessage =
   | { t: 'rename'; sessionId: string; title: string }
   | { t: 'archive'; sessionId: string; archived: boolean }
   | { t: 'permission'; sessionId: string; requestId: string; decision: PermissionDecision }
-  | { t: 'setMode'; sessionId: string; permissionMode: PermissionMode };
+  | { t: 'setMode'; sessionId: string; permissionMode: PermissionMode }
+  | { t: 'setModel'; sessionId: string; model: string | null };
 
 // ---- server -> client ------------------------------------------------------
 export type ServerMessage =

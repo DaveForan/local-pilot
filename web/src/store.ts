@@ -270,6 +270,10 @@ class PilotStore {
     this.raw({ t: 'setMode', sessionId, permissionMode });
   }
 
+  setModel(sessionId: string, model: string | null): void {
+    this.raw({ t: 'setModel', sessionId, model });
+  }
+
   rename(sessionId: string, title: string): void {
     this.raw({ t: 'rename', sessionId, title });
   }

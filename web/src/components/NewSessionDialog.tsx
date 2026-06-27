@@ -2,40 +2,30 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import type { DirListing } from '../api';
 import type { PermissionMode, ModelInfo } from '../protocol';
+import { FALLBACK_MODELS, mergeModels } from '../models';
 import { store } from '../store';
 import { useEscapeClose } from '../useModal';
-
-/** Fallback list used until the SDK reports the real catalog via supportedModels(). */
-const FALLBACK_MODELS: ModelInfo[] = [
-  { value: 'claude-opus-4-7', displayName: 'Claude Opus 4.7', description: 'Most capable' },
-  { value: 'claude-sonnet-4-6', displayName: 'Claude Sonnet 4.6', description: 'Balanced' },
-  {
-    value: 'claude-haiku-4-5-20251001',
-    displayName: 'Claude Haiku 4.5',
-    description: 'Fastest',
-  },
-];
 
 export function NewSessionDialog({ onClose }: { onClose: () => void }) {
   useEscapeClose(onClose);
   const [listing, setListing] = useState<DirListing | null>(null);
   const [title, setTitle] = useState('');
   const [mode, setMode] = useState<PermissionMode>('default');
-  const [models, setModels] = useState<ModelInfo[]>(FALLBACK_MODELS);
+  const [models, setModels] = useState<ModelInfo[]>(() => mergeModels([]));
   // Always an explicit, deliberate model — no "default" pass-through.
   const [model, setModel] = useState(FALLBACK_MODELS[0].value);
   const [err, setErr] = useState<string | null>(null);
 
-  // Pull the real catalog if the SDK has reported one yet. Empty list means
-  // no session has run yet this server boot — stick with the fallback.
+  // Pull the SDK's account catalog and merge it with the explicit version pins
+  // (so e.g. Opus 4.6 is selectable alongside the moving aliases). The server
+  // probes the SDK at startup, so this is populated even before the first run.
   useEffect(() => {
     api
       .models()
       .then((list) => {
-        if (list.length > 0) {
-          setModels(list);
-          if (!list.find((m) => m.value === model)) setModel(list[0].value);
-        }
+        const merged = mergeModels(list);
+        setModels(merged);
+        if (!merged.find((m) => m.value === model)) setModel(merged[0].value);
       })
       .catch(() => {
         /* keep fallback */

@@ -38,6 +38,10 @@ async function main(): Promise<void> {
 
   const manager = new SessionManager();
   await manager.init();
+  // Warm the model + slash-command catalogs from the SDK so the New Session
+  // dialog and in-session model switcher show the real account list (incl.
+  // newer Opus releases) without waiting for the first session. Non-blocking.
+  void manager.ensureCatalogs();
 
   const app = express();
   // tailscale serve proxies from loopback — trust it so req.secure and

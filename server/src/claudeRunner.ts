@@ -23,6 +23,9 @@ interface SDKUserMessage {
 interface LooseQuery extends AsyncGenerator<Record<string, any>> {
   interrupt?: () => Promise<void>;
   setPermissionMode?: (mode: string) => Promise<void> | void;
+  /** Change the model used for subsequent turns. `undefined` restores the
+   *  CLI default. This is the SDK's sanctioned mid-session model switch. */
+  setModel?: (model?: string) => Promise<void> | void;
   close?: () => void;
   /** Control-channel RPC — returns rich metadata (description, argumentHint)
    *  for every available slash command. The init system message gives names
@@ -421,17 +424,8 @@ export class ClaudeRunner {
 
     if (typeof gen.supportedCommands === 'function') {
       try {
-        const list = await gen.supportedCommands();
-        if (!this.stopped && Array.isArray(list)) {
-          const commands: SlashCommand[] = list
-            .filter((c) => c && typeof c.name === 'string')
-            .map((c) => ({
-              name: c.name,
-              description: typeof c.description === 'string' ? c.description : '',
-              argumentHint: typeof c.argumentHint === 'string' ? c.argumentHint : '',
-            }));
-          this.opts.onEvent({ kind: 'slash_commands', commands });
-        }
+        const commands = normalizeCommands(await gen.supportedCommands());
+        if (!this.stopped) this.opts.onEvent({ kind: 'slash_commands', commands });
       } catch (err) {
         console.warn('[runner] supportedCommands failed:', err);
       }
@@ -439,17 +433,8 @@ export class ClaudeRunner {
 
     if (typeof gen.supportedModels === 'function') {
       try {
-        const list = await gen.supportedModels();
-        if (!this.stopped && Array.isArray(list)) {
-          const models: ModelInfo[] = list
-            .filter((m) => m && typeof m.value === 'string')
-            .map((m) => ({
-              value: m.value,
-              displayName: typeof m.displayName === 'string' ? m.displayName : m.value,
-              description: typeof m.description === 'string' ? m.description : '',
-            }));
-          this.opts.onEvent({ kind: 'models', models });
-        }
+        const models = normalizeModels(await gen.supportedModels());
+        if (!this.stopped) this.opts.onEvent({ kind: 'models', models });
       } catch (err) {
         console.warn('[runner] supportedModels failed:', err);
       }
@@ -523,6 +508,20 @@ export class ClaudeRunner {
     }
   }
 
+  /** Switch the model on a live session via the SDK control channel. Pass null
+   *  to fall back to the CLI default. No-op (beyond the caller updating meta)
+   *  when no runner has started yet — the next start() picks up the new model. */
+  async setModel(model: string | null): Promise<void> {
+    this.opts.model = model;
+    try {
+      if (this.generator && typeof this.generator.setModel === 'function') {
+        await this.generator.setModel(model ?? undefined);
+      }
+    } catch (err) {
+      console.error('[runner] setModel failed:', err);
+    }
+  }
+
   async interrupt(): Promise<void> {
     try {
       if (this.generator && typeof this.generator.interrupt === 'function') {
@@ -543,6 +542,110 @@ export class ClaudeRunner {
       console.error('[runner] close failed:', err);
     }
   }
+}
+
+/** What a one-shot discovery probe learns from the SDK control channel. */
+export interface DiscoveryResult {
+  models: ModelInfo[];
+  slashCommands: SlashCommand[];
+}
+
+/**
+ * Spin up a throwaway Agent SDK `query` purely to read the account's model
+ * catalog and slash-command list over the control channel, then tear it down.
+ *
+ * The interactive runner only learns these *after* a session's `init` message,
+ * which means the New Session dialog has nothing real to show until the user
+ * has already created a session. This probe closes that gap: the SDK is the
+ * source of truth for which models the account can actually use (incl. newer
+ * Opus releases), so we ask it up front instead of hardcoding a list.
+ */
+export async function discover(
+  cwd: string,
+  timeoutMs = 20_000,
+): Promise<DiscoveryResult> {
+  const queue = new MessageQueue<SDKUserMessage>();
+  const options: Record<string, unknown> = {
+    cwd,
+    // Match the interactive runner so slash commands reflect the user's real
+    // ~/.claude + project config, not a bare default environment.
+    systemPrompt: { type: 'preset', preset: 'claude_code' },
+    settingSources: ['user', 'project', 'local'],
+  };
+
+  let gen: LooseQuery;
+  try {
+    gen = runQuery({ prompt: queue, options });
+  } catch (err) {
+    console.warn('[discover] failed to start probe query:', err);
+    return { models: [], slashCommands: [] };
+  }
+
+  // The control channel only advances while the generator is being consumed,
+  // so drain it in the background and discard every message.
+  let draining = true;
+  void (async () => {
+    try {
+      for await (const _msg of gen) {
+        if (!draining) break;
+      }
+    } catch {
+      /* torn down in finally below */
+    }
+  })();
+
+  const withTimeout = <T>(p: Promise<T>, fallback: T): Promise<T> =>
+    Promise.race([
+      Promise.resolve(p).catch(() => fallback),
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), timeoutMs)),
+    ]);
+
+  try {
+    const [rawModels, rawCommands] = await Promise.all([
+      typeof gen.supportedModels === 'function'
+        ? withTimeout(gen.supportedModels(), [] as Array<Record<string, unknown>>)
+        : Promise.resolve([] as Array<Record<string, unknown>>),
+      typeof gen.supportedCommands === 'function'
+        ? withTimeout(gen.supportedCommands(), [] as Array<Record<string, unknown>>)
+        : Promise.resolve([] as Array<Record<string, unknown>>),
+    ]);
+    return {
+      models: normalizeModels(rawModels),
+      slashCommands: normalizeCommands(rawCommands),
+    };
+  } finally {
+    draining = false;
+    queue.close();
+    try {
+      gen.close?.();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Coerce the SDK's loosely-typed model list into ModelInfo values. */
+function normalizeModels(list: unknown): ModelInfo[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((m): m is Record<string, unknown> => !!m && typeof (m as any).value === 'string')
+    .map((m) => ({
+      value: m.value as string,
+      displayName: typeof m.displayName === 'string' ? m.displayName : (m.value as string),
+      description: typeof m.description === 'string' ? m.description : '',
+    }));
+}
+
+/** Coerce the SDK's loosely-typed command list into SlashCommand values. */
+function normalizeCommands(list: unknown): SlashCommand[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((c): c is Record<string, unknown> => !!c && typeof (c as any).name === 'string')
+    .map((c) => ({
+      name: c.name as string,
+      description: typeof c.description === 'string' ? c.description : '',
+      argumentHint: typeof c.argumentHint === 'string' ? c.argumentHint : '',
+    }));
 }
 
 /** Tools that count as edits for the acceptEdits permission mode. */

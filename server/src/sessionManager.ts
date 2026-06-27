@@ -6,12 +6,14 @@ import type { Broadcaster } from './wsHub';
 import { saveSession, deleteSessionFile, loadAllSessions } from './store';
 import { sendPush } from './push';
 import { DEFAULT_CWD } from './config';
+import { discover } from './claudeRunner';
 import type {
   SessionMeta,
   PermissionMode,
   PermissionDecision,
   ChatImage,
   ModelInfo,
+  SlashCommand,
   McpServerStatus,
   AccountInfo,
 } from './protocol';
@@ -20,11 +22,15 @@ import type {
 export class SessionManager {
   private readonly sessions = new Map<string, Session>();
   private broadcaster: Broadcaster | null = null;
-  /** Account-wide model list, populated lazily by any running session.
-   *  Empty until the first session's runner has started. */
+  /** Account-wide model list. Seeded by a startup discovery probe and kept
+   *  fresh by any running session's control channel. */
   private cachedModels: ModelInfo[] = [];
-  /** Authenticated account info — same lazy population. */
+  /** Slash commands — same seeding/refresh path as the model list. */
+  private cachedSlashCommands: SlashCommand[] = [];
+  /** Authenticated account info — populated lazily by a running session. */
   private cachedAccount: AccountInfo | null = null;
+  /** Memoizes the one-shot SDK discovery probe so concurrent callers share it. */
+  private catalogProbe: Promise<void> | null = null;
 
   setBroadcaster(b: Broadcaster): void {
     this.broadcaster = b;
@@ -45,6 +51,34 @@ export class SessionManager {
 
   models(): ModelInfo[] {
     return this.cachedModels;
+  }
+
+  slashCommands(): SlashCommand[] {
+    return this.cachedSlashCommands;
+  }
+
+  /** Probe the SDK once for the account's real model catalog + slash commands
+   *  so the New Session dialog can show them before any session exists. The
+   *  result is memoized; awaiting it from a request handler is cheap after the
+   *  first call. Best-effort — a failure leaves the cached lists untouched. */
+  ensureCatalogs(): Promise<void> {
+    if (!this.catalogProbe) {
+      this.catalogProbe = discover(DEFAULT_CWD)
+        .then(({ models, slashCommands }) => {
+          if (models.length > 0) this.cachedModels = models;
+          if (slashCommands.length > 0) this.cachedSlashCommands = slashCommands;
+          console.log(
+            `[manager] discovered ${this.cachedModels.length} model(s), ` +
+              `${this.cachedSlashCommands.length} slash command(s)`,
+          );
+        })
+        .catch((err) => {
+          console.warn('[manager] catalog discovery failed:', err);
+          // Allow a later caller to retry rather than caching the failure.
+          this.catalogProbe = null;
+        });
+    }
+    return this.catalogProbe;
   }
 
   account(): AccountInfo | null {
@@ -126,6 +160,10 @@ export class SessionManager {
     this.require(id).setMode(mode);
   }
 
+  setModel(id: string, model: string | null): void {
+    this.require(id).setModel(model);
+  }
+
   rename(id: string, title: string): void {
     this.require(id).rename(title);
   }
@@ -175,7 +213,10 @@ export class SessionManager {
         void saveSession(session.toPersisted());
       },
       onModels: (models) => {
-        this.cachedModels = models;
+        if (models.length > 0) this.cachedModels = models;
+      },
+      onSlashCommands: (commands) => {
+        if (commands.length > 0) this.cachedSlashCommands = commands;
       },
       onAccount: (account) => {
         this.cachedAccount = account;
