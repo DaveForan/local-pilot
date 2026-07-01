@@ -146,6 +146,9 @@ export class WsHub implements Broadcaster {
       case 'setModel':
         this.manager.setModel(msg.sessionId, msg.model);
         break;
+      case 'setEffort':
+        this.manager.setEffort(msg.sessionId, msg.effort);
+        break;
       case 'rename':
         this.manager.rename(msg.sessionId, msg.title);
         break;

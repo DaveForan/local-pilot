@@ -5,10 +5,16 @@ import type {
   PermissionMode,
   AccountInfo,
   ModelInfo,
+  EffortLevel,
 } from '../protocol';
 import type { ConnectionState } from '../store';
 import { store } from '../store';
-import { mergeModels } from '../models';
+import {
+  pickerModels,
+  modelLabel,
+  effortLevelsFor,
+  EFFORT_LABEL,
+} from '../models';
 import { relativeTime, shortPath } from '../format';
 import { STATUS } from './status';
 import type { Theme } from '../theme';
@@ -172,7 +178,7 @@ export function Drawer({
   const [renameValue, setRenameValue] = useState('');
   const [viewArchived, setViewArchived] = useState(false);
   const [account, setAccount] = useState<AccountInfo | null>(null);
-  const [models, setModels] = useState<ModelInfo[]>(() => mergeModels([]));
+  const [models, setModels] = useState<ModelInfo[]>(() => pickerModels([]));
 
   useEffect(() => {
     if (!open) return;
@@ -180,12 +186,12 @@ export function Drawer({
       .account()
       .then((r) => setAccount(r.account))
       .catch(() => setAccount(null));
-    // SDK account aliases merged with explicit version pins (e.g. Opus 4.6),
-    // so the in-session switcher offers the same choices as the new-session
-    // dialog. Falls back to the curated list until discovery resolves.
+    // SDK account aliases + explicit version pins (e.g. Opus 4.6), with the
+    // per-model effort metadata the SDK reports. Falls back to the curated
+    // list until discovery resolves.
     api
       .models()
-      .then((list) => setModels(mergeModels(list)))
+      .then((list) => setModels(pickerModels(list)))
       .catch(() => {
         /* keep fallback */
       });
@@ -207,6 +213,17 @@ export function Drawer({
   const ctxLimit = contextWindowFor(activeModel);
   const ctxPct = ctxUsed != null ? Math.min(100, Math.round((ctxUsed / ctxLimit) * 100)) : 0;
   const ctxWarn = ctxPct >= 80;
+
+  // The ModelInfo for the session's current model — used to label the model
+  // dropdown and to derive which effort levels that model actually supports.
+  const activeModelInfo: ModelInfo | undefined = activeModel
+    ? models.find((m) => m.value === activeModel) ?? {
+        value: activeModel,
+        displayName: activeModel,
+        description: '',
+      }
+    : undefined;
+  const effortLevels: EffortLevel[] = effortLevelsFor(activeModelInfo);
 
   const startRename = (): void => {
     if (!active) return;
@@ -381,13 +398,36 @@ export function Drawer({
                   onChange={(e) => store.setModel(active.id, e.target.value || null)}
                   title="Switch the model. Takes effect on the next turn — mid-session if it's already running."
                 >
-                  <option value="">Default</option>
-                  {(activeModel && !models.some((m) => m.value === activeModel)
-                    ? [{ value: activeModel, displayName: activeModel, description: '' }, ...models]
+                  {(activeModelInfo && !models.some((m) => m.value === activeModel)
+                    ? [activeModelInfo, ...models]
                     : models
                   ).map((m) => (
-                    <option key={m.value} value={m.value} title={m.description}>
-                      {m.displayName}
+                    <option key={m.value} value={m.value} title={m.description || undefined}>
+                      {modelLabel(m)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="cs-field cs-field-effort">
+                <span>Reasoning effort</span>
+                <select
+                  value={active.effort ?? ''}
+                  disabled={effortLevels.length === 0}
+                  onChange={(e) =>
+                    store.setEffort(active.id, (e.target.value || null) as EffortLevel | null)
+                  }
+                  title={
+                    effortLevels.length === 0
+                      ? 'This model does not support an effort level.'
+                      : 'How much reasoning the model applies. Higher is more thorough and slower. Applied live mid-session.'
+                  }
+                >
+                  <option value="">
+                    {effortLevels.length === 0 ? 'Not supported' : 'Model default (high)'}
+                  </option>
+                  {effortLevels.map((lvl) => (
+                    <option key={lvl} value={lvl}>
+                      {EFFORT_LABEL[lvl]}
                     </option>
                   ))}
                 </select>

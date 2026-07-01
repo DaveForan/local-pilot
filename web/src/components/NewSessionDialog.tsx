@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import type { DirListing } from '../api';
-import type { PermissionMode, ModelInfo } from '../protocol';
-import { FALLBACK_MODELS, mergeModels } from '../models';
+import type { PermissionMode, ModelInfo, EffortLevel } from '../protocol';
+import {
+  pickerModels,
+  modelLabel,
+  effortLevelsFor,
+  EFFORT_LABEL,
+} from '../models';
 import { store } from '../store';
 import { useEscapeClose } from '../useModal';
 
@@ -11,27 +16,37 @@ export function NewSessionDialog({ onClose }: { onClose: () => void }) {
   const [listing, setListing] = useState<DirListing | null>(null);
   const [title, setTitle] = useState('');
   const [mode, setMode] = useState<PermissionMode>('default');
-  const [models, setModels] = useState<ModelInfo[]>(() => mergeModels([]));
+  const [models, setModels] = useState<ModelInfo[]>(() => pickerModels([]));
   // Always an explicit, deliberate model — no "default" pass-through.
-  const [model, setModel] = useState(FALLBACK_MODELS[0].value);
+  const [model, setModel] = useState(() => pickerModels([])[0].value);
+  // null = the model's default effort (high).
+  const [effort, setEffort] = useState<EffortLevel | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // Pull the SDK's account catalog and merge it with the explicit version pins
-  // (so e.g. Opus 4.6 is selectable alongside the moving aliases). The server
-  // probes the SDK at startup, so this is populated even before the first run.
+  // Pull the SDK's account catalog (specific labels + explicit version pins,
+  // so e.g. Opus 4.6 is selectable). The server probes the SDK at startup, so
+  // this is populated even before the first run.
   useEffect(() => {
     api
       .models()
       .then((list) => {
-        const merged = mergeModels(list);
-        setModels(merged);
-        if (!merged.find((m) => m.value === model)) setModel(merged[0].value);
+        const next = pickerModels(list);
+        setModels(next);
+        if (!next.find((m) => m.value === model)) setModel(next[0].value);
       })
       .catch(() => {
         /* keep fallback */
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Reset effort to the model default whenever the chosen model can't honor the
+  // current pick — keeps the two controls coherent.
+  const effortLevels = effortLevelsFor(models.find((m) => m.value === model));
+  useEffect(() => {
+    if (effort && !effortLevels.includes(effort)) setEffort(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model, models]);
 
   const browse = (path?: string): void => {
     setErr(null);
@@ -52,6 +67,7 @@ export function NewSessionDialog({ onClose }: { onClose: () => void }) {
       title: title.trim() || undefined,
       permissionMode: mode,
       model,
+      effort,
     });
     onClose();
   };
@@ -81,9 +97,26 @@ export function NewSessionDialog({ onClose }: { onClose: () => void }) {
           <span>Model</span>
           <select value={model} onChange={(e) => setModel(e.target.value)}>
             {models.map((m) => (
-              <option key={m.value} value={m.value} title={m.description}>
-                {m.displayName}
-                {m.description ? ` — ${m.description}` : ''}
+              <option key={m.value} value={m.value} title={m.description || undefined}>
+                {modelLabel(m)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>Reasoning effort</span>
+          <select
+            value={effort ?? ''}
+            disabled={effortLevels.length === 0}
+            onChange={(e) => setEffort((e.target.value || null) as EffortLevel | null)}
+          >
+            <option value="">
+              {effortLevels.length === 0 ? 'Not supported by this model' : 'Model default (high)'}
+            </option>
+            {effortLevels.map((lvl) => (
+              <option key={lvl} value={lvl}>
+                {EFFORT_LABEL[lvl]}
               </option>
             ))}
           </select>

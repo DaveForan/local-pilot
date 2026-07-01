@@ -6,6 +6,7 @@ import type {
   SessionEvent,
   PermissionDecision,
   PermissionMode,
+  EffortLevel,
   ChatImage,
 } from './protocol';
 import { api, type Snippet } from './api';
@@ -248,6 +249,7 @@ class PilotStore {
     cwd: string;
     title?: string;
     model?: string | null;
+    effort?: EffortLevel | null;
     permissionMode?: PermissionMode;
   }): void {
     this.selectOnHistory = true;
@@ -272,6 +274,10 @@ class PilotStore {
 
   setModel(sessionId: string, model: string | null): void {
     this.raw({ t: 'setModel', sessionId, model });
+  }
+
+  setEffort(sessionId: string, effort: EffortLevel | null): void {
+    this.raw({ t: 'setEffort', sessionId, effort });
   }
 
   rename(sessionId: string, title: string): void {

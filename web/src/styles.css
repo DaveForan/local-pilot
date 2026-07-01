@@ -640,6 +640,10 @@ textarea {
   padding: 8px 10px;
   outline: none;
 }
+.cs-field select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 .drawer-danger {
   width: calc(100% - 8px);

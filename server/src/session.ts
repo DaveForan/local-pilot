@@ -15,6 +15,7 @@ import type {
   ChatImage,
   SlashCommand,
   ModelInfo,
+  EffortLevel,
   McpServerStatus,
   AccountInfo,
 } from './protocol';
@@ -142,6 +143,16 @@ export class Session {
     this.schedulePersist();
   }
 
+  /** Change reasoning effort. Same pattern as setModel: meta + live apply when
+   *  a runner exists, else picked up by Options.effort on the next start. */
+  setEffort(effort: EffortLevel | null): void {
+    if ((this.meta.effort ?? null) === effort) return;
+    this.meta.effort = effort;
+    this.hooks.onMeta(this.meta);
+    void this.runner?.setEffort(effort);
+    this.schedulePersist();
+  }
+
   rename(title: string): void {
     const t = title.trim();
     if (!t || t === this.meta.title) return;
@@ -226,6 +237,7 @@ export class Session {
     const runner = new ClaudeRunner({
       cwd: this.meta.cwd,
       model: this.meta.model,
+      effort: this.meta.effort ?? null,
       permissionMode: this.meta.permissionMode,
       resumeSessionId: this.meta.claudeSessionId,
       // Read fresh each time a runner starts so MCP edits apply to new runs.

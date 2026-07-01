@@ -4,6 +4,7 @@ import type {
   ChatImage,
   SlashCommand,
   ModelInfo,
+  EffortLevel,
   McpServerStatus,
   AccountInfo,
 } from './protocol';
@@ -26,6 +27,10 @@ interface LooseQuery extends AsyncGenerator<Record<string, any>> {
   /** Change the model used for subsequent turns. `undefined` restores the
    *  CLI default. This is the SDK's sanctioned mid-session model switch. */
   setModel?: (model?: string) => Promise<void> | void;
+  /** Merge a partial settings object into the session's flag-settings layer —
+   *  the SDK's sanctioned way to change `effortLevel` (and more) mid-session.
+   *  Streaming-input mode only. */
+  applyFlagSettings?: (settings: Record<string, unknown>) => Promise<void> | void;
   close?: () => void;
   /** Control-channel RPC — returns rich metadata (description, argumentHint)
    *  for every available slash command. The init system message gives names
@@ -130,6 +135,8 @@ export interface PermissionOutcome {
 export interface RunnerOptions {
   cwd: string;
   model: string | null;
+  /** Reasoning effort to start the session at. null = the model's default. */
+  effort: EffortLevel | null;
   permissionMode: PermissionMode;
   /** Claude Code session id to resume (after a server restart); null for fresh. */
   resumeSessionId: string | null;
@@ -244,16 +251,25 @@ export class ClaudeRunner {
         if (toolName === 'TodoWrite') {
           return { behavior: 'allow', updatedInput: input };
         }
+        // AskUserQuestion is not a risky action to gate — it's Claude asking the
+        // user for input, and the answer is delivered back through this same
+        // canUseTool result. Auto-allowing it (as bypassPermissions otherwise
+        // would) means no answer is ever injected and the SDK treats the
+        // question as dismissed. So it must always reach the user, whatever the
+        // permission mode.
+        const isElicitation = ELICITATION_TOOLS.has(toolName);
         // Honor the current permissionMode here — without this, providing
         // canUseTool would override the SDK's mode-based auto-allow and the
         // user would still get prompted on every tool even with acceptEdits
         // or bypassPermissions selected.
         const mode = this.opts.permissionMode;
-        if (mode === 'bypassPermissions') {
-          return { behavior: 'allow', updatedInput: input };
-        }
-        if (mode === 'acceptEdits' && EDIT_TOOLS.has(toolName)) {
-          return { behavior: 'allow', updatedInput: input };
+        if (!isElicitation) {
+          if (mode === 'bypassPermissions') {
+            return { behavior: 'allow', updatedInput: input };
+          }
+          if (mode === 'acceptEdits' && EDIT_TOOLS.has(toolName)) {
+            return { behavior: 'allow', updatedInput: input };
+          }
         }
         const outcome = await this.opts.onPermission(toolName, input, extra?.suggestions);
         // `updatedInput` is required on an allow result — it is the input the
@@ -264,6 +280,9 @@ export class ClaudeRunner {
       },
     };
     if (this.opts.model) options.model = this.opts.model;
+    // `effort` accepts the full range (low..max) at session start, unlike the
+    // mid-session applyFlagSettings path which the SDK types narrower.
+    if (this.opts.effort) options.effort = this.opts.effort;
     if (this.opts.resumeSessionId) options.resume = this.opts.resumeSessionId;
     if (Object.keys(this.opts.mcpServers).length > 0) {
       options.mcpServers = this.opts.mcpServers;
@@ -522,6 +541,21 @@ export class ClaudeRunner {
     }
   }
 
+  /** Change reasoning effort on a live session via applyFlagSettings. `null`
+   *  clears it back to the model default. Persisted in opts so a restarted
+   *  runner re-applies it through Options.effort. */
+  async setEffort(effort: EffortLevel | null): Promise<void> {
+    this.opts.effort = effort;
+    try {
+      if (this.generator && typeof this.generator.applyFlagSettings === 'function') {
+        // `null` clears the flag layer (falls back to lower-precedence sources).
+        await this.generator.applyFlagSettings({ effortLevel: effort });
+      }
+    } catch (err) {
+      console.error('[runner] setEffort failed:', err);
+    }
+  }
+
   async interrupt(): Promise<void> {
     try {
       if (this.generator && typeof this.generator.interrupt === 'function') {
@@ -624,16 +658,28 @@ export async function discover(
   }
 }
 
-/** Coerce the SDK's loosely-typed model list into ModelInfo values. */
+const EFFORT_LEVELS: EffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+/** Coerce the SDK's loosely-typed model list into ModelInfo values, preserving
+ *  the per-model effort capability the SDK reports. */
 function normalizeModels(list: unknown): ModelInfo[] {
   if (!Array.isArray(list)) return [];
   return list
     .filter((m): m is Record<string, unknown> => !!m && typeof (m as any).value === 'string')
-    .map((m) => ({
-      value: m.value as string,
-      displayName: typeof m.displayName === 'string' ? m.displayName : (m.value as string),
-      description: typeof m.description === 'string' ? m.description : '',
-    }));
+    .map((m) => {
+      const levels = Array.isArray(m.supportedEffortLevels)
+        ? (m.supportedEffortLevels as unknown[]).filter(
+            (l): l is EffortLevel => typeof l === 'string' && EFFORT_LEVELS.includes(l as EffortLevel),
+          )
+        : undefined;
+      return {
+        value: m.value as string,
+        displayName: typeof m.displayName === 'string' ? m.displayName : (m.value as string),
+        description: typeof m.description === 'string' ? m.description : '',
+        ...(typeof m.supportsEffort === 'boolean' ? { supportsEffort: m.supportsEffort } : {}),
+        ...(levels ? { supportedEffortLevels: levels } : {}),
+      };
+    });
 }
 
 /** Coerce the SDK's loosely-typed command list into SlashCommand values. */
@@ -650,6 +696,11 @@ function normalizeCommands(list: unknown): SlashCommand[] {
 
 /** Tools that count as edits for the acceptEdits permission mode. */
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+
+/** Tools that ask the user for input rather than performing an action. These
+ *  must always be routed to the user (never auto-allowed by permission mode),
+ *  because the user's answer is delivered back through the canUseTool result. */
+const ELICITATION_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
 function normalizeMcpStatus(s: unknown): McpServerStatus['status'] {
   if (s === 'connected' || s === 'failed' || s === 'needs-auth' || s === 'pending') return s;

@@ -15,6 +15,8 @@ export interface SessionMeta {
   title: string;
   cwd: string;
   model: string | null;
+  /** Reasoning effort for this session. null = the model's default (`high`). */
+  effort?: EffortLevel | null;
   permissionMode: PermissionMode;
   status: SessionStatus;
   createdAt: number;
@@ -42,10 +44,16 @@ export interface SlashCommand {
 }
 
 /** A model the account has access to — matches the SDK's `ModelInfo` shape. */
+export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 export interface ModelInfo {
   value: string;
   displayName: string;
   description: string;
+  /** Whether this model accepts an effort level at all (false for e.g. Haiku). */
+  supportsEffort?: boolean;
+  /** The exact effort levels this model supports, per the SDK. */
+  supportedEffortLevels?: EffortLevel[];
 }
 
 /** Authenticated account info, as reported by the SDK. */
@@ -167,6 +175,7 @@ export type ClientMessage =
       cwd: string;
       title?: string;
       model?: string | null;
+      effort?: EffortLevel | null;
       permissionMode?: PermissionMode;
     }
   | { t: 'attach'; sessionId: string }
@@ -180,7 +189,8 @@ export type ClientMessage =
   | { t: 'archive'; sessionId: string; archived: boolean }
   | { t: 'permission'; sessionId: string; requestId: string; decision: PermissionDecision }
   | { t: 'setMode'; sessionId: string; permissionMode: PermissionMode }
-  | { t: 'setModel'; sessionId: string; model: string | null };
+  | { t: 'setModel'; sessionId: string; model: string | null }
+  | { t: 'setEffort'; sessionId: string; effort: EffortLevel | null };
 
 // ---- server -> client ------------------------------------------------------
 export type ServerMessage =

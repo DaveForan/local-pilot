@@ -13,6 +13,7 @@ import type {
   PermissionDecision,
   ChatImage,
   ModelInfo,
+  EffortLevel,
   SlashCommand,
   McpServerStatus,
   AccountInfo,
@@ -111,6 +112,7 @@ export class SessionManager {
     cwd?: string;
     title?: string;
     model?: string | null;
+    effort?: EffortLevel | null;
     permissionMode?: PermissionMode;
   }): Session {
     const cwd = opts.cwd?.trim() || DEFAULT_CWD;
@@ -121,6 +123,7 @@ export class SessionManager {
       title: opts.title?.trim() || basename(cwd),
       cwd,
       model: opts.model ?? null,
+      effort: opts.effort ?? null,
       permissionMode: opts.permissionMode ?? 'default',
       status: 'idle',
       createdAt: now,
@@ -162,6 +165,10 @@ export class SessionManager {
 
   setModel(id: string, model: string | null): void {
     this.require(id).setModel(model);
+  }
+
+  setEffort(id: string, effort: EffortLevel | null): void {
+    this.require(id).setEffort(effort);
   }
 
   rename(id: string, title: string): void {

@@ -15,6 +15,8 @@ export interface SessionMeta {
   title: string;
   cwd: string;
   model: string | null;
+  /** Reasoning effort for this session. null = the model's default (`high`). */
+  effort?: EffortLevel | null;
   permissionMode: PermissionMode;
   status: SessionStatus;
   createdAt: number;
@@ -41,11 +43,21 @@ export interface SlashCommand {
   argumentHint: string;
 }
 
-/** A model the account has access to — matches the SDK's `ModelInfo` shape. */
+/** Reasoning effort levels the SDK accepts. `xhigh` is Opus 4.7+/Fable 5 only
+ *  (falls back to `high` elsewhere); `max` is select models only. Default is
+ *  `high` when unset. */
+export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+/** A model the account has access to — matches the SDK's `ModelInfo` shape,
+ *  including the effort-capability metadata the SDK reports per model. */
 export interface ModelInfo {
   value: string;
   displayName: string;
   description: string;
+  /** Whether this model accepts an effort level at all (false for e.g. Haiku). */
+  supportsEffort?: boolean;
+  /** The exact effort levels this model supports, per the SDK. */
+  supportedEffortLevels?: EffortLevel[];
 }
 
 /** Authenticated account info, as reported by the SDK. */
@@ -167,6 +179,7 @@ export type ClientMessage =
       cwd: string;
       title?: string;
       model?: string | null;
+      effort?: EffortLevel | null;
       permissionMode?: PermissionMode;
     }
   | { t: 'attach'; sessionId: string }
@@ -181,7 +194,9 @@ export type ClientMessage =
   | { t: 'permission'; sessionId: string; requestId: string; decision: PermissionDecision }
   | { t: 'setMode'; sessionId: string; permissionMode: PermissionMode }
   /** Switch the model — mid-session if a runner is live, else for next start. */
-  | { t: 'setModel'; sessionId: string; model: string | null };
+  | { t: 'setModel'; sessionId: string; model: string | null }
+  /** Change reasoning effort — live via applyFlagSettings, else for next start. */
+  | { t: 'setEffort'; sessionId: string; effort: EffortLevel | null };
 
 // ---- server -> client ------------------------------------------------------
 export type ServerMessage =
