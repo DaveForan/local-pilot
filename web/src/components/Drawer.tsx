@@ -198,7 +198,11 @@ export function Drawer({
   const filtered = filter.trim()
     ? visible.filter((s) => {
         const q = filter.trim().toLowerCase();
-        return s.title.toLowerCase().includes(q) || s.cwd.toLowerCase().includes(q);
+        return (
+          s.title.toLowerCase().includes(q) ||
+          s.cwd.toLowerCase().includes(q) ||
+          (s.tags ?? []).some((tag) => tag.toLowerCase().includes(q))
+        );
       })
     : visible;
 
@@ -310,6 +314,15 @@ export function Drawer({
                         )}
                       </span>
                       <span className="session-sub">{shortPath(s.cwd)}</span>
+                      {(s.tags ?? []).length > 0 && (
+                        <span className="session-tags">
+                          {s.tags!.map((tag) => (
+                            <span key={tag} className="tag-chip">
+                              {tag}
+                            </span>
+                          ))}
+                        </span>
+                      )}
                     </span>
                     <span className="session-time">{relativeTime(s.lastActivity)}</span>
                   </button>
@@ -503,6 +516,30 @@ export function Drawer({
                   )}
                 </>
               )}
+              <button
+                className="btn btn-ghost drawer-fork"
+                title="Copy this session's timeline into a new session; the Claude conversation is forked so both keep full context and diverge independently"
+                onClick={() => store.fork(active.id)}
+              >
+                ⑂ Fork session
+              </button>
+              <button
+                className="btn btn-ghost drawer-tags"
+                onClick={() => {
+                  const next = window.prompt(
+                    'Tags (comma-separated)',
+                    (active.tags ?? []).join(', '),
+                  );
+                  if (next != null) {
+                    store.setTags(
+                      active.id,
+                      next.split(',').map((t) => t.trim()).filter(Boolean),
+                    );
+                  }
+                }}
+              >
+                🏷 Tags{(active.tags ?? []).length > 0 ? ` (${active.tags!.length})` : '…'}
+              </button>
               <a
                 className="btn btn-ghost drawer-export"
                 href={api.exportUrl(active.id)}

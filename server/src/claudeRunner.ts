@@ -144,6 +144,9 @@ export interface RunnerOptions {
   permissionMode: PermissionMode;
   /** Claude Code session id to resume (after a server restart); null for fresh. */
   resumeSessionId: string | null;
+  /** With resumeSessionId: branch the resumed conversation into a NEW Claude
+   *  session instead of continuing the original (SDK forkSession). */
+  forkSession: boolean;
   /** MCP servers local-pilot layers onto this session (may be empty). */
   mcpServers: Record<string, unknown>;
   /** SDK-shaped hooks option, or null when the user has none configured. */
@@ -297,7 +300,10 @@ export class ClaudeRunner {
     // `effort` accepts the full range (low..max) at session start, unlike the
     // mid-session applyFlagSettings path which the SDK types narrower.
     if (this.opts.effort) options.effort = this.opts.effort;
-    if (this.opts.resumeSessionId) options.resume = this.opts.resumeSessionId;
+    if (this.opts.resumeSessionId) {
+      options.resume = this.opts.resumeSessionId;
+      if (this.opts.forkSession) options.forkSession = true;
+    }
     if (Object.keys(this.opts.mcpServers).length > 0) {
       options.mcpServers = this.opts.mcpServers;
     }
@@ -380,6 +386,25 @@ export class ClaudeRunner {
           const trigger = meta?.trigger === 'manual' ? 'manual' : 'auto';
           const preTokens = Number(meta?.pre_tokens ?? 0) || 0;
           this.opts.onEvent({ kind: 'compaction', trigger, preTokens });
+        } else if (msg.subtype === 'notification') {
+          // SDK-originated notice (auth expiring, usage limits, …) — surface
+          // it instead of dropping it on the floor.
+          if (typeof msg.text === 'string' && msg.text) {
+            this.opts.onEvent({ kind: 'system', text: msg.text });
+          }
+        } else if (msg.subtype === 'task_started') {
+          if (!msg.skip_transcript && typeof msg.description === 'string') {
+            this.opts.onEvent({
+              kind: 'system',
+              text: `Background task started — ${msg.description}`,
+            });
+          }
+        } else if (msg.subtype === 'task_notification') {
+          if (!msg.skip_transcript) {
+            const status = typeof msg.status === 'string' ? msg.status : 'finished';
+            const summary = typeof msg.summary === 'string' && msg.summary ? ` — ${msg.summary}` : '';
+            this.opts.onEvent({ kind: 'system', text: `Background task ${status}${summary}` });
+          }
         }
         break;
       }
@@ -480,8 +505,9 @@ export class ClaudeRunner {
       default: {
         // Anything unrecognized (including any future elicitation /
         // MCP-elicitation messages) gets logged so it's diagnosable instead
-        // of silently dropped.
-        if (msg.type) {
+        // of silently dropped. Known-benign chatter is exempted: progress
+        // heartbeats and rate-limit info would spam the log.
+        if (msg.type && msg.type !== 'tool_progress' && msg.type !== 'rate_limit_event') {
           console.warn(`[runner] unhandled SDK message type: ${msg.type}`);
         }
         break;

@@ -469,6 +469,21 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.session-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+.tag-chip {
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-2);
+  border: 1px solid var(--line-soft);
+  color: var(--text-2);
+}
 .session-time {
   font-size: 10px;
   color: var(--text-3);

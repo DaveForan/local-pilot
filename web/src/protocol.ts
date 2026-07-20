@@ -38,6 +38,13 @@ export interface SessionMeta {
    *  taken from result-message modelUsage, so it reflects reality (incl. 1M
    *  beta windows) instead of a hardcoded guess. */
   contextWindow?: number;
+  /** User-assigned labels, shown as chips and matched by the list filter. */
+  tags?: string[];
+  /** Set when this session was forked from another and hasn't started its
+   *  runner yet: the first start passes forkSession so the SDK branches the
+   *  source conversation instead of continuing it. Cleared once the forked
+   *  session receives its own Claude session id. */
+  pendingFork?: boolean;
 }
 
 /** Metadata for one slash command — matches the SDK's `SlashCommand` shape. */
@@ -195,6 +202,10 @@ export type ClientMessage =
   | { t: 'delete'; sessionId: string }
   | { t: 'rename'; sessionId: string; title: string }
   | { t: 'archive'; sessionId: string; archived: boolean }
+  /** Branch a session: copies the timeline and (when possible) forks the
+   *  underlying Claude conversation so both sides keep full context. */
+  | { t: 'fork'; sessionId: string }
+  | { t: 'setTags'; sessionId: string; tags: string[] }
   | { t: 'permission'; sessionId: string; requestId: string; decision: PermissionDecision }
   | { t: 'setMode'; sessionId: string; permissionMode: PermissionMode }
   /** Switch the model — mid-session if a runner is live, else for next start. */

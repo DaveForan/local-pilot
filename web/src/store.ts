@@ -352,6 +352,17 @@ class PilotStore {
     this.raw({ t: 'archive', sessionId, archived });
   }
 
+  /** Branch a session — the server replies with a `history` for the new one,
+   *  which (via selectOnHistory) becomes the active session. */
+  fork(sessionId: string): void {
+    this.selectOnHistory = true;
+    this.raw({ t: 'fork', sessionId });
+  }
+
+  setTags(sessionId: string, tags: string[]): void {
+    this.raw({ t: 'setTags', sessionId, tags });
+  }
+
   resolvePermission(sessionId: string, requestId: string, decision: PermissionDecision): void {
     this.raw({ t: 'permission', sessionId, requestId, decision });
   }

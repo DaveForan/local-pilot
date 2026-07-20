@@ -179,6 +179,13 @@ export class Session {
     this.schedulePersist();
   }
 
+  setTags(tags: string[]): void {
+    const clean = [...new Set(tags.map((t) => t.trim()).filter(Boolean))].slice(0, 20);
+    this.meta.tags = clean.length > 0 ? clean : undefined;
+    this.hooks.onMeta(this.meta);
+    this.schedulePersist();
+  }
+
   resolvePermission(requestId: string, decision: PermissionDecision): void {
     const entry = this.pending.get(requestId);
 
@@ -252,6 +259,7 @@ export class Session {
       effort: this.meta.effort ?? null,
       permissionMode: this.meta.permissionMode,
       resumeSessionId: this.meta.claudeSessionId,
+      forkSession: !!this.meta.pendingFork,
       // Read fresh each time a runner starts so MCP edits apply to new runs.
       mcpServers: readMcpServersSync(),
       // Same story for hooks — config edits take effect on the next runner spin-up.
@@ -286,6 +294,12 @@ export class Session {
         let changed = false;
         if (this.meta.claudeSessionId !== event.claudeSessionId) {
           this.meta.claudeSessionId = event.claudeSessionId;
+          changed = true;
+        }
+        // A forked session now owns its own Claude session id — later runner
+        // starts must resume that id normally, not fork again.
+        if (this.meta.pendingFork) {
+          this.meta.pendingFork = undefined;
           changed = true;
         }
         // Pin the actually-resolved model so the UI can show it explicitly

@@ -147,6 +147,40 @@ export class SessionManager {
     return session;
   }
 
+  /** Branch a session: copy its timeline into a new session and, when the
+   *  source has a Claude session id, mark it pendingFork so the first runner
+   *  start forks the SDK conversation (full context, independent future). */
+  fork(id: string): Session {
+    const source = this.require(id);
+    const now = Date.now();
+    const meta: SessionMeta = {
+      id: nanoid(12),
+      title: `${source.meta.title} (fork)`,
+      cwd: source.meta.cwd,
+      model: source.meta.model,
+      effort: source.meta.effort ?? null,
+      permissionMode: source.meta.permissionMode,
+      status: 'idle',
+      createdAt: now,
+      lastActivity: now,
+      eventCount: source.events.length,
+      claudeSessionId: source.meta.claudeSessionId,
+      pendingFork: source.meta.claudeSessionId ? true : undefined,
+      tags: source.meta.tags ? [...source.meta.tags] : undefined,
+      slashCommands: source.meta.slashCommands,
+      outputStyle: source.meta.outputStyle,
+      contextWindow: source.meta.contextWindow,
+    };
+    // Deep-copy the timeline so the two sessions can't share mutable events
+    // (permission status flips, userUuid patches).
+    const events = JSON.parse(JSON.stringify(source.events)) as typeof source.events;
+    const session = new Session(meta, events, this.hooks());
+    this.sessions.set(meta.id, session);
+    this.broadcaster?.toAll({ t: 'session', session: meta });
+    void saveSession(session.toPersisted());
+    return session;
+  }
+
   async delete(id: string): Promise<void> {
     const session = this.sessions.get(id);
     if (!session) return;
@@ -186,6 +220,10 @@ export class SessionManager {
 
   setArchived(id: string, archived: boolean): void {
     this.require(id).setArchived(archived);
+  }
+
+  setTags(id: string, tags: string[]): void {
+    this.require(id).setTags(tags);
   }
 
   disposeAll(): void {

@@ -167,6 +167,25 @@ export class WsHub implements Broadcaster {
       case 'archive':
         this.manager.setArchived(msg.sessionId, msg.archived);
         break;
+      case 'fork': {
+        const session = this.manager.fork(msg.sessionId);
+        this.attachments.get(ws)?.add(session.meta.id);
+        // Same shape as attach: newest slice + pagination flag, so the client
+        // can select the fork immediately.
+        const all = session.events;
+        const sliced = all.slice(-HISTORY_PAGE_SIZE);
+        this.send(ws, {
+          t: 'history',
+          sessionId: session.meta.id,
+          meta: session.meta,
+          events: sliced,
+          hasMore: sliced.length < all.length,
+        });
+        break;
+      }
+      case 'setTags':
+        this.manager.setTags(msg.sessionId, msg.tags);
+        break;
     }
   }
 
