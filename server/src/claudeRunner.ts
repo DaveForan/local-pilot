@@ -76,6 +76,8 @@ const runQuery = query as unknown as (arg: {
 /** Normalised events emitted by the runner — the SDK shape never leaks past here. */
 export type RunnerEvent =
   | { kind: 'assistant'; text: string }
+  /** Live streaming text delta — transient, superseded by the full 'assistant'. */
+  | { kind: 'assistant_partial'; text: string }
   | { kind: 'thinking'; text: string }
   | { kind: 'tool_use'; toolId: string; name: string; input: unknown }
   | {
@@ -98,6 +100,8 @@ export type RunnerEvent =
         cacheRead: number;
         cacheCreate: number;
       };
+      /** Context-window size (tokens) the SDK reported for the turn's model. */
+      contextWindow?: number;
       text: string;
     }
   | {
@@ -252,6 +256,9 @@ export class ClaudeRunner {
       // Snapshot files before each modification so the user can rewind the
       // workspace back to the state at any prior turn via rewindFiles().
       enableFileCheckpointing: true,
+      // Stream token deltas so replies render live instead of landing as one
+      // block at the end of the turn.
+      includePartialMessages: true,
       canUseTool: async (toolName: string, input: Record<string, unknown>, extra: any) => {
         // TodoWrite is tracking-only (no filesystem / no exec); auto-allow so
         // the user isn't pestered every time Claude updates the task list.
@@ -417,6 +424,19 @@ export class ClaudeRunner {
         }
         break;
       }
+      case 'stream_event': {
+        // Live token deltas (includePartialMessages). Main thread only —
+        // subagent streams carry a parent_tool_use_id.
+        if (msg.parent_tool_use_id) break;
+        const ev = msg.event as Record<string, any> | undefined;
+        if (ev?.type === 'content_block_delta') {
+          const delta = ev.delta as Record<string, any> | undefined;
+          if (delta?.type === 'text_delta' && typeof delta.text === 'string' && delta.text) {
+            this.opts.onEvent({ kind: 'assistant_partial', text: delta.text });
+          }
+        }
+        break;
+      }
       case 'result': {
         const ok = msg.subtype === 'success' && msg.is_error !== true;
         // The SDK reports a `usage` block (input/output/cache tokens) and a
@@ -433,22 +453,35 @@ export class ClaudeRunner {
               cacheCreate: Number(usage.cache_creation_input_tokens ?? 0) || 0,
             }
           : undefined;
+        // modelUsage carries the real per-model context-window size — the only
+        // way to know it (incl. 1M-beta windows) without hardcoding a table.
+        const modelUsage = msg.modelUsage as
+          | Record<string, { contextWindow?: number }>
+          | undefined;
+        let contextWindow: number | undefined;
+        if (modelUsage) {
+          for (const m of Object.values(modelUsage)) {
+            if (typeof m?.contextWindow === 'number' && m.contextWindow > 0) {
+              contextWindow = Math.max(contextWindow ?? 0, m.contextWindow);
+            }
+          }
+        }
         this.opts.onEvent({
           kind: 'result',
           isError: !ok,
           durationMs: typeof msg.duration_ms === 'number' ? msg.duration_ms : null,
           costUsd: typeof msg.total_cost_usd === 'number' ? msg.total_cost_usd : null,
           tokens,
+          contextWindow,
           text: ok ? 'Turn complete' : `Turn ended: ${msg.subtype ?? 'error'}`,
         });
         break;
       }
       default: {
-        // Streaming token deltas are already captured via the 'assistant'
-        // message — they're noisy and expected. Anything else (including any
-        // future elicitation/MCP-elicitation messages) we log so they're
-        // diagnosable instead of silently dropped.
-        if (msg.type && msg.type !== 'stream_event') {
+        // Anything unrecognized (including any future elicitation /
+        // MCP-elicitation messages) gets logged so it's diagnosable instead
+        // of silently dropped.
+        if (msg.type) {
           console.warn(`[runner] unhandled SDK message type: ${msg.type}`);
         }
         break;

@@ -31,6 +31,8 @@ type NewEvent = DistributiveOmit<SessionEvent, 'seq' | 'ts'>;
 /** Side-channel callbacks the SessionManager wires up for broadcasting + persistence. */
 export interface SessionHooks {
   onEvent(sessionId: string, event: SessionEvent): void;
+  /** Streaming text delta for the in-flight reply — broadcast, never persisted. */
+  onPartial(sessionId: string, text: string): void;
   onMeta(meta: SessionMeta): void;
   onPermission(request: PermissionRequest): void;
   persist(session: Session): void;
@@ -338,6 +340,10 @@ export class Session {
       case 'assistant':
         this.add({ kind: 'assistant', text: event.text });
         break;
+      case 'assistant_partial':
+        // Transient — straight to attached clients, never into the event log.
+        this.hooks.onPartial(this.meta.id, event.text);
+        break;
       case 'thinking':
         this.add({ kind: 'thinking', text: event.text });
         break;
@@ -393,6 +399,12 @@ export class Session {
         this.interrupting = false;
         const isError = interrupted ? false : event.isError;
         const text = interrupted ? 'Interrupted' : event.text;
+        // The SDK told us the real context-window size for this session's
+        // model — pin it so the UI's usage bar scales correctly.
+        if (event.contextWindow && this.meta.contextWindow !== event.contextWindow) {
+          this.meta.contextWindow = event.contextWindow;
+          this.hooks.onMeta(this.meta);
+        }
         this.add(
           event.tokens
             ? {
@@ -412,6 +424,9 @@ export class Session {
               },
         );
         this.setStatus(isError ? 'error' : 'idle');
+        // Turn boundary — flush now so the completed turn is on disk even if
+        // the adaptive debounce below would have waited seconds.
+        this.persistNow();
         break;
       }
     }
@@ -481,10 +496,25 @@ export class Session {
 
   private schedulePersist(): void {
     if (this.persistTimer) return;
+    // Every persist re-serializes the whole event log (base64 images
+    // included), so the debounce scales with session size: short sessions
+    // keep the snappy 400 ms, long image-heavy ones are capped at one
+    // rewrite per 5 s. Turn end (persistNow) and dispose() flush promptly,
+    // so the crash-loss window stays small where it matters.
+    const delay = Math.min(5000, 400 + this.events.length * 2);
     this.persistTimer = setTimeout(() => {
       this.persistTimer = null;
       this.hooks.persist(this);
-    }, 400);
+    }, delay);
+  }
+
+  /** Cancel any pending debounce and persist immediately. */
+  private persistNow(): void {
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    this.hooks.persist(this);
   }
 }
 

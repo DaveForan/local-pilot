@@ -881,6 +881,18 @@ textarea {
   border-radius: 14px 14px 14px 4px;
   padding: 4px 16px;
 }
+/* In-flight streamed reply: same bubble, plus a blinking caret at the end. */
+.ev-streaming .md > :last-child::after {
+  content: '▍';
+  margin-left: 2px;
+  color: var(--accent);
+  animation: stream-caret 1s steps(2) infinite;
+}
+@keyframes stream-caret {
+  50% {
+    opacity: 0;
+  }
+}
 .speak-btn {
   align-self: flex-start;
   background: transparent;

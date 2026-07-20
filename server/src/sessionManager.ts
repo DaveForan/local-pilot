@@ -220,6 +220,9 @@ export class SessionManager {
           );
         }
       },
+      onPartial: (sessionId, text) => {
+        this.broadcaster?.toSession(sessionId, { t: 'partial', sessionId, text });
+      },
       onMeta: (meta) => this.broadcaster?.toAll({ t: 'session', session: meta }),
       onPermission: (request) => {
         this.broadcaster?.toSession(request.sessionId, { t: 'permission', request });

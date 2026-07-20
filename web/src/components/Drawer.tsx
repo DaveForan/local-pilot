@@ -136,15 +136,9 @@ function fmtCount(n: number): string {
   return `${(n / 1_000_000).toFixed(2)}M`;
 }
 
-/** Best-effort context-window size for a given Claude model id.
- *  All current Claude 4.x models default to 200K; the 1M beta is opt-in. */
-function contextWindowFor(model: string | null): number {
-  if (!model) return 200_000;
-  if (model.startsWith('claude-haiku-')) return 200_000;
-  if (model.startsWith('claude-sonnet-')) return 200_000;
-  if (model.startsWith('claude-opus-')) return 200_000;
-  return 200_000;
-}
+/** Fallback context-window size until the SDK reports the real one (which it
+ *  does on the session's first turn result, via meta.contextWindow). */
+const DEFAULT_CONTEXT_WINDOW = 200_000;
 
 /** Sum of every token kind that occupies the model's prompt window. */
 function currentContextTokens(events: SessionEvent[]): number | null {
@@ -210,7 +204,9 @@ export function Drawer({
 
   const totals = active ? totalsFromEvents(activeEvents) : null;
   const ctxUsed = active ? currentContextTokens(activeEvents) : null;
-  const ctxLimit = contextWindowFor(activeModel);
+  // Prefer the size the SDK actually reported for this session's model —
+  // covers 1M-beta windows and future models without a hardcoded table.
+  const ctxLimit = active?.contextWindow || DEFAULT_CONTEXT_WINDOW;
   const ctxPct = ctxUsed != null ? Math.min(100, Math.round((ctxUsed / ctxLimit) * 100)) : 0;
   const ctxWarn = ctxPct >= 80;
 

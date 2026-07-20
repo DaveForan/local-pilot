@@ -31,6 +31,9 @@ export interface PilotState {
   hasMore: Record<string, boolean>;
   /** Per-session flag: a `loadEarlier` request is in flight. */
   loadingEarlier: Record<string, boolean>;
+  /** Accumulated streaming text of the in-flight reply, keyed by session id.
+   *  Cleared when the complete assistant event (or the turn result) lands. */
+  partial: Record<string, string>;
   activeId: string | null;
   error: string | null;
   /** Saved prompts, loaded once over REST (not the WebSocket). */
@@ -50,6 +53,7 @@ class PilotStore {
     events: {},
     hasMore: {},
     loadingEarlier: {},
+    partial: {},
     activeId: null,
     error: null,
     snippets: [],
@@ -177,8 +181,11 @@ class PilotStore {
       case 'deleted': {
         const events = { ...this.state.events };
         delete events[msg.sessionId];
+        const partial = { ...this.state.partial };
+        delete partial[msg.sessionId];
         this.attached.delete(msg.sessionId);
         this.patch({
+          partial,
           sessions: this.state.sessions.filter((s) => s.id !== msg.sessionId),
           events,
           activeId: this.state.activeId === msg.sessionId ? null : this.state.activeId,
@@ -210,6 +217,8 @@ class PilotStore {
           events: { ...this.state.events, [msg.sessionId]: events },
           hasMore: { ...this.state.hasMore, [msg.sessionId]: hasMore },
           loadingEarlier: { ...this.state.loadingEarlier, [msg.sessionId]: false },
+          // A fresh history pull invalidates any half-streamed preview.
+          partial: { ...this.state.partial, [msg.sessionId]: '' },
           activeId: this.selectOnHistory ? msg.sessionId : this.state.activeId,
         });
         this.selectOnHistory = false;
@@ -234,6 +243,11 @@ class PilotStore {
       case 'event':
         this.applyEvent(msg.sessionId, msg.event);
         break;
+      case 'partial': {
+        const cur = this.state.partial[msg.sessionId] ?? '';
+        this.patch({ partial: { ...this.state.partial, [msg.sessionId]: cur + msg.text } });
+        break;
+      }
       case 'permission':
         // The inline `permission` timeline event already drives the UI;
         // this message is reserved for future push notifications.
@@ -251,7 +265,16 @@ class PilotStore {
     const next = exists
       ? list.map((e) => (e.seq === event.seq ? event : e))
       : [...list, event].sort((a, b) => a.seq - b.seq);
-    this.patch({ events: { ...this.state.events, [sessionId]: next } });
+    // The complete assistant text (or the turn's result) supersedes the
+    // streamed preview — clear it in the same patch so there's no flicker
+    // frame where both render.
+    const clearPartial =
+      (event.kind === 'assistant' || event.kind === 'result') &&
+      (this.state.partial[sessionId] ?? '') !== '';
+    this.patch({
+      events: { ...this.state.events, [sessionId]: next },
+      ...(clearPartial ? { partial: { ...this.state.partial, [sessionId]: '' } } : {}),
+    });
   }
 
   // --- actions --------------------------------------------------------------

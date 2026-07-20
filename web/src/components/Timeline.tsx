@@ -136,6 +136,8 @@ interface Props {
   hasMore: boolean;
   /** True while a loadEarlier request is in flight. */
   loadingEarlier: boolean;
+  /** Streaming text of the in-flight reply ('' when nothing is streaming). */
+  partial: string;
   /** When on, new replies are read aloud automatically. */
   voiceMode: boolean;
   /** Called once a reply has finished being read aloud. */
@@ -148,6 +150,7 @@ export function Timeline({
   status,
   hasMore,
   loadingEarlier,
+  partial,
   voiceMode,
   onReplySpoken,
 }: Props) {
@@ -209,6 +212,17 @@ export function Timeline({
       endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
   }, [events, status]);
+
+  // Follow the streaming reply, but only when the user is already near the
+  // bottom — never yank them back down while they're reading history.
+  useEffect(() => {
+    if (!partial) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
+      endRef.current?.scrollIntoView({ block: 'end' });
+    }
+  }, [partial]);
 
   // Conversation mode: read each newly-completed reply aloud.
   useEffect(() => {
@@ -275,6 +289,13 @@ export function Timeline({
           />
         );
       })}
+      {partial && (
+        <div className="ev ev-assistant ev-streaming">
+          <div className="md">
+            <Reply>{partial}</Reply>
+          </div>
+        </div>
+      )}
       <div ref={endRef} />
       {logTurn && <ActivityLog turn={logTurn} onClose={() => setLogKey(null)} />}
       {rewindTarget && (

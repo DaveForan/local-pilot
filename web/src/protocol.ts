@@ -34,6 +34,10 @@ export interface SessionMeta {
   /** Currently active output style (e.g. "default"). The SDK has no setter
    *  via the runtime API — change it with the /output-style slash command. */
   outputStyle?: string;
+  /** Context-window size (tokens) the SDK reported for this session's model —
+   *  taken from result-message modelUsage, so it reflects reality (incl. 1M
+   *  beta windows) instead of a hardcoded guess. */
+  contextWindow?: number;
 }
 
 /** Metadata for one slash command — matches the SDK's `SlashCommand` shape. */
@@ -218,6 +222,10 @@ export type ServerMessage =
       hasMore: boolean;
     }
   | { t: 'event'; sessionId: string; event: SessionEvent }
+  /** Live streaming text delta for the in-flight assistant reply. Transient:
+   *  never persisted — the complete `assistant` event supersedes it and the
+   *  client clears its buffer when that (or the turn result) arrives. */
+  | { t: 'partial'; sessionId: string; text: string }
   | { t: 'permission'; request: PermissionRequest }
   | { t: 'deleted'; sessionId: string }
   | { t: 'error'; message: string; sessionId?: string };
