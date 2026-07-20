@@ -79,9 +79,20 @@ function parseCookies(header: string | undefined): Record<string, string> {
     const eq = part.indexOf('=');
     if (eq < 0) continue;
     const key = part.slice(0, eq).trim();
-    if (key) out[key] = decodeURIComponent(part.slice(eq + 1).trim());
+    if (key) out[key] = safeDecode(part.slice(eq + 1).trim());
   }
   return out;
+}
+
+/** A malformed %-escape must never throw — on the WebSocket handshake path
+ *  there is no Express error handler above us, so an exception here would
+ *  take down the whole process (pre-auth, from any client). */
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 /** True when a request or WebSocket handshake carries a valid session cookie. */

@@ -316,6 +316,30 @@ export function createApiRouter(manager: SessionManager) {
           .json({ error: `Archive contains unsafe path: ${unsafe}` });
         return;
       }
+      // The name check above can't see entry *types* — a symlink member
+      // (`sessions -> /home/user/.ssh`) followed by files extracted through
+      // it escapes the data dir even with --no-absolute-names. Reject any
+      // link entry outright; a legitimate export never contains one.
+      const verbose = await new Promise<string>((resolve, reject) => {
+        const probe = spawn('tar', ['-tvzf', tmpFile]);
+        let out = '';
+        let err = '';
+        probe.stdout.on('data', (b: Buffer) => (out += b.toString()));
+        probe.stderr.on('data', (b: Buffer) => (err += b.toString()));
+        probe.on('close', (code) =>
+          code === 0 ? resolve(out) : reject(new Error(err || 'invalid archive')),
+        );
+      });
+      const linkEntry = verbose
+        .split('\n')
+        .map((s) => s.trim())
+        .find((line) => /^[lh]/.test(line));
+      if (linkEntry) {
+        res
+          .status(400)
+          .json({ error: `Archive contains a link entry: ${linkEntry}` });
+        return;
+      }
       // Extract into the data dir with belt-and-suspenders: --no-absolute-names
       // and --no-overwrite-dir block the same attacks at the tar level.
       // -p preserves modes; we deliberately let it overwrite files — that's

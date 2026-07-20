@@ -52,8 +52,19 @@ async function loadSubscriptions(): Promise<PushSubscriptionRecord[]> {
   }
 }
 
-async function saveSubscriptions(): Promise<void> {
-  await fs.writeFile(paths.pushSubs, JSON.stringify(subscriptions, null, 2) + '\n', 'utf8');
+// Serialize file writes: add/remove/prune can overlap (e.g. two turns
+// finishing at once), and interleaved writeFile calls corrupt the JSON.
+// Each queued write snapshots the *current* array when it runs, so the last
+// write in the chain always lands the latest state.
+let writeChain: Promise<void> = Promise.resolve();
+
+function saveSubscriptions(): Promise<void> {
+  writeChain = writeChain
+    .then(() =>
+      fs.writeFile(paths.pushSubs, JSON.stringify(subscriptions, null, 2) + '\n', 'utf8'),
+    )
+    .catch((err) => console.error('[push] failed to save subscriptions:', err));
+  return writeChain;
 }
 
 /** Load keys + subscriptions; call once at startup. */

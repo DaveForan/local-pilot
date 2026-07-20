@@ -69,7 +69,12 @@ export function AskUserQuestionCard({
     const answers: Record<string, string | string[]> = {};
     questions.forEach((q, i) => {
       const a = answerFor(i, q);
-      if (a !== null) answers[q.question] = a;
+      if (a === null) return;
+      // Two questions with identical wording would collide on this key and
+      // one answer would silently overwrite the other.
+      let key = q.question;
+      if (key in answers) key = `${key} (${i + 1})`;
+      answers[key] = a;
     });
     store.resolvePermission(sessionId, event.requestId, {
       behavior: 'answer',

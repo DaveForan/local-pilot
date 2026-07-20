@@ -66,6 +66,15 @@ export class SessionManager {
     if (!this.catalogProbe) {
       this.catalogProbe = discover(DEFAULT_CWD)
         .then(({ models, slashCommands }) => {
+          if (models.length === 0 && slashCommands.length === 0) {
+            // discover() reports failure as empty lists (it never rejects), so
+            // the .catch below can't fire. Don't memoize a failed probe — that
+            // would leave the New Session dialog empty for the process
+            // lifetime. Reset so the next request retries.
+            console.warn('[manager] catalog discovery returned nothing — will retry');
+            this.catalogProbe = null;
+            return;
+          }
           if (models.length > 0) this.cachedModels = models;
           if (slashCommands.length > 0) this.cachedSlashCommands = slashCommands;
           console.log(

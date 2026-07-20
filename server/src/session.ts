@@ -55,6 +55,10 @@ export class Session {
   private runner: ClaudeRunner | null = null;
   private seq: number;
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
+  /** True between a user-initiated interrupt and the next result/input — lets
+   *  us present the aborted turn's error-flavored result as a clean stop
+   *  instead of flagging the session (and the user's phone) with an error. */
+  private interrupting = false;
   private readonly pending = new Map<
     string,
     { resolve: (o: PermissionOutcome) => void; event: PermissionEvent }
@@ -80,8 +84,11 @@ export class Session {
 
   sendInput(text: string, images?: ChatImage[]): void {
     if (this.meta.status === 'ended') return;
+    this.interrupting = false;
     this.add(images && images.length > 0 ? { kind: 'user', text, images } : { kind: 'user', text });
-    this.setStatus('running');
+    // Don't clobber awaiting_permission — the prompt is still unresolved and
+    // the status badge should keep saying so; the new message just queues.
+    if (this.meta.status !== 'awaiting_permission') this.setStatus('running');
     this.ensureRunner().send(text, images);
   }
 
@@ -117,12 +124,14 @@ export class Session {
   }
 
   async interrupt(): Promise<void> {
-    if (this.runner) await this.runner.interrupt();
-    for (const { resolve } of this.pending.values()) {
-      resolve({ behavior: 'deny', message: 'Interrupted.' });
+    // Only arm the flag when a turn can actually be in flight, so an idle
+    // interrupt can't swallow a later genuine error.
+    if (this.meta.status === 'running' || this.meta.status === 'awaiting_permission') {
+      this.interrupting = true;
     }
-    this.pending.clear();
-    this.setStatus('idle');
+    if (this.runner) await this.runner.interrupt();
+    this.failPending('Interrupted.');
+    if (this.meta.status !== 'ended') this.setStatus('idle');
   }
 
   setMode(mode: PermissionMode): void {
@@ -214,16 +223,17 @@ export class Session {
   }
 
   dispose(): void {
-    for (const { resolve } of this.pending.values()) {
-      resolve({ behavior: 'deny', message: 'Session closed.' });
-    }
-    this.pending.clear();
+    this.failPending('Session closed.');
     this.runner?.stop();
     this.runner = null;
     if (this.persistTimer) {
       clearTimeout(this.persistTimer);
       this.persistTimer = null;
     }
+    // Flush instead of dropping whatever the cancelled debounce was holding —
+    // otherwise the newest ~400 ms of events (including the denials above)
+    // are lost on every shutdown/reload.
+    this.hooks.persist(this);
   }
 
   toPersisted(): PersistedSession {
@@ -252,7 +262,14 @@ export class Session {
       },
       onEnd: () => {
         this.runner = null;
-        if (this.meta.status === 'running') this.setStatus('idle');
+        // The SDK promises behind any pending permissions died with the
+        // runner — resolve them now or the session sits in
+        // awaiting_permission forever and a later click on the stale card
+        // flips it to a phantom "running".
+        this.failPending('Claude process ended before this was answered.');
+        if (this.meta.status === 'running' || this.meta.status === 'awaiting_permission') {
+          this.setStatus('idle');
+        }
       },
       onPermission: (toolName, input, suggestions) =>
         this.requestPermission(toolName, input, suggestions),
@@ -367,28 +384,51 @@ export class Session {
           preTokens: event.preTokens,
         });
         break;
-      case 'result':
+      case 'result': {
+        // A turn the user just stopped reports an error-flavored result — that
+        // is the abort working as intended, not a failure. Present it as a
+        // clean stop so the session isn't badged "error" and no error push
+        // notification fires.
+        const interrupted = this.interrupting && event.isError;
+        this.interrupting = false;
+        const isError = interrupted ? false : event.isError;
+        const text = interrupted ? 'Interrupted' : event.text;
         this.add(
           event.tokens
             ? {
                 kind: 'result',
-                isError: event.isError,
+                isError,
                 durationMs: event.durationMs,
                 costUsd: event.costUsd,
                 tokens: event.tokens,
-                text: event.text,
+                text,
               }
             : {
                 kind: 'result',
-                isError: event.isError,
+                isError,
                 durationMs: event.durationMs,
                 costUsd: event.costUsd,
-                text: event.text,
+                text,
               },
         );
-        this.setStatus(event.isError ? 'error' : 'idle');
+        this.setStatus(isError ? 'error' : 'idle');
         break;
+      }
     }
+  }
+
+  /** Deny every pending permission and mark its event resolved, so the SDK
+   *  promise is released AND the UI card/modal stops showing "pending". */
+  private failPending(message: string): void {
+    for (const { resolve, event } of this.pending.values()) {
+      resolve({ behavior: 'deny', message });
+      if (event.status === 'pending') {
+        event.status = 'denied';
+        event.resolution = `Denied — ${message}`;
+        this.touch(event);
+      }
+    }
+    this.pending.clear();
   }
 
   private requestPermission(

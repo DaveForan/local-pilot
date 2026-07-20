@@ -43,9 +43,13 @@ export interface SlashCommand {
   argumentHint: string;
 }
 
-/** A model the account has access to — matches the SDK's `ModelInfo` shape. */
+/** Reasoning effort levels the SDK accepts. `xhigh` is Opus 4.7+/Fable 5 only
+ *  (falls back to `high` elsewhere); `max` is select models only. Default is
+ *  `high` when unset. */
 export type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
+/** A model the account has access to — matches the SDK's `ModelInfo` shape,
+ *  including the effort-capability metadata the SDK reports per model. */
 export interface ModelInfo {
   value: string;
   displayName: string;
@@ -189,7 +193,9 @@ export type ClientMessage =
   | { t: 'archive'; sessionId: string; archived: boolean }
   | { t: 'permission'; sessionId: string; requestId: string; decision: PermissionDecision }
   | { t: 'setMode'; sessionId: string; permissionMode: PermissionMode }
+  /** Switch the model — mid-session if a runner is live, else for next start. */
   | { t: 'setModel'; sessionId: string; model: string | null }
+  /** Change reasoning effort — live via applyFlagSettings, else for next start. */
   | { t: 'setEffort'; sessionId: string; effort: EffortLevel | null };
 
 // ---- server -> client ------------------------------------------------------

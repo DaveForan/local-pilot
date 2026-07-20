@@ -50,10 +50,12 @@ export function ElicitationModal({
   if (!sessionId || !pending) return null;
 
   return (
-    <div className="modal-backdrop elicitation-backdrop" onClick={cancel}>
+    // Deliberately no onClick on the backdrop: a stray tap outside the modal
+    // (easy on mobile) must not silently deny a pending approval. Dismissal
+    // is Esc or an explicit button on the card.
+    <div className="modal-backdrop elicitation-backdrop">
       <div
         className="modal modal-wide elicitation-modal"
-        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Claude is asking"

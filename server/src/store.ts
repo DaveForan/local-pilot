@@ -33,15 +33,40 @@ export async function loadAllSessions(): Promise<PersistedSession[]> {
   return out;
 }
 
-/** Atomic write: write to a temp file then rename over the target. */
-export async function saveSession(data: PersistedSession): Promise<void> {
-  await ensureDirs();
-  const target = sessionFile(data.meta.id);
-  const tmp = `${target}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(data), 'utf8');
-  await fs.rename(tmp, target);
+// Per-session operation chains. Saves and deletes for one session id run
+// strictly in order: concurrent debounced saves can no longer interleave on
+// the shared .tmp file, and a delete queued after an in-flight save removes
+// the file the save produced instead of racing it (which used to resurrect
+// deleted sessions on the next restart).
+const chains = new Map<string, Promise<unknown>>();
+
+function enqueue<T>(id: string, op: () => Promise<T>): Promise<T> {
+  const prev = chains.get(id) ?? Promise.resolve();
+  const run = prev.then(op, op);
+  chains.set(
+    id,
+    run.catch((err) => console.error(`[store] write failed for ${id}:`, err)),
+  );
+  return run;
 }
 
-export async function deleteSessionFile(id: string): Promise<void> {
-  await fs.rm(sessionFile(id), { force: true });
+/** Resolves when every queued session write/delete has settled. Await this
+ *  on shutdown so the final flush actually reaches disk. */
+export async function flushWrites(): Promise<void> {
+  await Promise.all([...chains.values()]);
+}
+
+/** Atomic write: write to a temp file then rename over the target. */
+export function saveSession(data: PersistedSession): Promise<void> {
+  return enqueue(data.meta.id, async () => {
+    await ensureDirs();
+    const target = sessionFile(data.meta.id);
+    const tmp = `${target}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(data), 'utf8');
+    await fs.rename(tmp, target);
+  });
+}
+
+export function deleteSessionFile(id: string): Promise<void> {
+  return enqueue(id, () => fs.rm(sessionFile(id), { force: true }));
 }

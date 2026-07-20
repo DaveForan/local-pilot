@@ -86,17 +86,35 @@ class PilotStore {
   }
 
   private connect(): void {
+    // The reconnect timer and ensureConnected can race — if a live (or
+    // in-flight) socket already exists, opening a second one would orphan it
+    // and let its eventual close corrupt the connection state.
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+    if (this.reconnectTimer != null) {
+      window.clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     // The session cookie authenticates the handshake automatically.
     const ws = new WebSocket(`${proto}://${location.host}/ws`);
     this.ws = ws;
     if (this.state.conn !== 'open') this.patch({ conn: 'connecting' });
     ws.onopen = () => {
+      if (this.ws !== ws) {
+        ws.close();
+        return;
+      }
       this.patch({ connected: true, conn: 'open', retryCount: 0 });
       // Re-attach to every session we were watching before the drop.
       for (const id of this.attached) this.raw({ t: 'attach', sessionId: id });
     };
     ws.onmessage = (ev) => {
+      if (this.ws !== ws) return; // stale socket — ignore
       try {
         this.handle(JSON.parse(ev.data as string) as ServerMessage);
       } catch {
@@ -104,6 +122,7 @@ class PilotStore {
       }
     };
     ws.onclose = (ev) => {
+      if (this.ws !== ws) return; // a newer socket owns the state now
       // 4401 (or any 4xxx) is what we'd use server-side if the cookie was
       // bad; treat it as auth expired so the UI can force a re-login.
       // Otherwise classify by retry count so the user can tell "drop in
@@ -133,10 +152,14 @@ class PilotStore {
     }, delay);
   }
 
-  private raw(msg: ClientMessage): void {
+  /** Send if the socket is open; returns false (instead of silently dropping
+   *  the message) when it isn't, so callers can keep the user's input. */
+  private raw(msg: ClientMessage): boolean {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
+      return true;
     }
+    return false;
   }
 
   // --- inbound --------------------------------------------------------------
@@ -165,10 +188,27 @@ class PilotStore {
       case 'history': {
         const rest = this.state.sessions.filter((s) => s.id !== msg.meta.id);
         this.attached.add(msg.sessionId);
+        // A re-attach (reconnect, tab refocus) sends only the newest slice.
+        // Keep any older pages the user already loaded via "Load earlier"
+        // instead of collapsing the timeline underneath them.
+        const existing = this.state.events[msg.sessionId] ?? [];
+        let events = msg.events;
+        let hasMore = msg.hasMore;
+        if (existing.length > 0 && msg.events.length > 0) {
+          const incomingOldest = msg.events[0].seq;
+          const seen = new Set(msg.events.map((e) => e.seq));
+          const olderPages = existing.filter((e) => e.seq < incomingOldest && !seen.has(e.seq));
+          if (olderPages.length > 0) {
+            events = [...olderPages, ...msg.events];
+            // Our oldest event is older than the slice's — whether even older
+            // ones exist is what we knew before, not what this slice says.
+            hasMore = this.state.hasMore[msg.sessionId] ?? msg.hasMore;
+          }
+        }
         this.patch({
           sessions: sortSessions([...rest, msg.meta]),
-          events: { ...this.state.events, [msg.sessionId]: msg.events },
-          hasMore: { ...this.state.hasMore, [msg.sessionId]: msg.hasMore },
+          events: { ...this.state.events, [msg.sessionId]: events },
+          hasMore: { ...this.state.hasMore, [msg.sessionId]: hasMore },
           loadingEarlier: { ...this.state.loadingEarlier, [msg.sessionId]: false },
           activeId: this.selectOnHistory ? msg.sessionId : this.state.activeId,
         });
@@ -256,8 +296,9 @@ class PilotStore {
     this.raw({ t: 'create', ...opts });
   }
 
-  sendInput(sessionId: string, text: string, images?: ChatImage[]): void {
-    this.raw({ t: 'input', sessionId, text, images });
+  /** Returns false when the message could not be sent (socket not open). */
+  sendInput(sessionId: string, text: string, images?: ChatImage[]): boolean {
+    return this.raw({ t: 'input', sessionId, text, images });
   }
 
   interrupt(sessionId: string): void {
@@ -294,6 +335,11 @@ class PilotStore {
 
   clearError(): void {
     this.patch({ error: null });
+  }
+
+  /** Surface a client-side problem in the same banner server errors use. */
+  reportError(message: string): void {
+    this.patch({ error: message });
   }
 
   // --- snippets (saved prompts, REST-backed) --------------------------------

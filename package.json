@@ -13,7 +13,7 @@
     "dev:web": "npm -w web run dev",
     "build": "npm -w web run build",
     "start": "npm -w server run start",
-    "typecheck": "npm -w server run typecheck && npm -w web run typecheck",
+    "typecheck": "node scripts/check-protocol.mjs && npm -w server run typecheck && npm -w web run typecheck",
     "service:install": "bash scripts/install-service.sh",
     "whisper:install": "bash scripts/install-whisper.sh",
     "piper:install": "bash scripts/install-piper.sh"

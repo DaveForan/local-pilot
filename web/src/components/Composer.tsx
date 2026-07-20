@@ -8,7 +8,7 @@ import {
   type DragEvent as ReactDragEvent,
 } from 'react';
 import type { SessionMeta, ChatImage, SlashCommand } from '../protocol';
-import { store } from '../store';
+import { store, usePilot } from '../store';
 import { api } from '../api';
 import { prepareImage, type PreparedImage } from '../image';
 import { recordUtterance, recordingSupported } from '../audio';
@@ -109,6 +109,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     onError: (message: string) => void;
   }>({ onClip: () => {}, onNoSpeech: () => {}, onError: () => {} });
 
+  const { connected } = usePilot();
   const busy = session.status === 'running' || session.status === 'awaiting_permission';
   const ended = session.status === 'ended';
   const hasDraft = text.trim() !== '' || images.length > 0;
@@ -134,40 +135,56 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     setPendingSend(false);
   };
 
-  const sendNow = (payload: QueuedMessage): void => {
+  const sendNow = (payload: QueuedMessage): boolean =>
     store.sendInput(session.id, payload.text, toChatImages(payload.images));
-  };
 
   /** Send the draft straight to Claude, or queue it if Claude is busy. */
   const submit = (): void => {
     if (!canSend) return;
     const payload: QueuedMessage = { text: text.trim(), images: [...images] };
-    setText('');
-    setImages([]);
     if (busy) {
       // Claude is mid-turn — line this up; the drain effect sends it next.
+      setText('');
+      setImages([]);
       setQueue((q) => [...q, payload]);
       return;
     }
+    if (!connected) {
+      // Keep the draft — clearing it while the socket is down would silently
+      // eat the message (common during a mobile/Tailscale reconnect window).
+      store.reportError('Not connected — message not sent. It will stay in the composer.');
+      return;
+    }
+    setText('');
+    setImages([]);
     stopVoice();
-    sendNow(payload);
+    if (!sendNow(payload)) {
+      // Raced a drop between the check and the send — restore the draft.
+      setText(payload.text);
+      setImages(payload.images);
+      store.reportError('Connection dropped — message not sent.');
+    }
   };
   submitRef.current = submit;
 
   // Drain queued messages once Claude finishes the previous turn. Guarded so
-  // a state-update race can't double-send the same message.
+  // a state-update race can't double-send the same message. Waits for the
+  // socket too — draining while disconnected would discard the queue.
   useEffect(() => {
     if (busy) {
       drainGuard.current = false;
       return;
     }
-    if (ended || queue.length === 0 || drainGuard.current) return;
+    if (ended || !connected || queue.length === 0 || drainGuard.current) return;
     drainGuard.current = true;
     const [next, ...rest] = queue;
+    if (!sendNow(next)) {
+      drainGuard.current = false;
+      return; // still queued; retried when the connection returns
+    }
     setQueue(rest);
-    sendNow(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy, ended, queue]);
+  }, [busy, ended, connected, queue]);
 
   // Auto-grow the textarea to fit content, up to a cap.
   useEffect(() => {

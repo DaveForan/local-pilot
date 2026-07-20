@@ -86,22 +86,34 @@ export function buildHookCallback(command: string): (
         process.stderr.write(`[hook] ${b.toString()}`);
       });
 
+      let killTimer: ReturnType<typeof setTimeout> | null = null;
       const timer = setTimeout(() => {
         try {
           child.kill('SIGTERM');
         } catch {
           /* ignore */
         }
+        // A hook that ignores SIGTERM would leak as a live process; follow
+        // up hard if it hasn't exited shortly after.
+        killTimer = setTimeout(() => {
+          try {
+            child.kill('SIGKILL');
+          } catch {
+            /* ignore */
+          }
+        }, 2000);
         done({});
       }, HOOK_TIMEOUT_MS);
 
       child.on('error', (err) => {
         clearTimeout(timer);
+        if (killTimer) clearTimeout(killTimer);
         console.warn('[hooks] runtime error:', err);
         done({});
       });
       child.on('close', () => {
         clearTimeout(timer);
+        if (killTimer) clearTimeout(killTimer);
         const text = Buffer.concat(stdoutChunks).toString().trim();
         if (!text) return done({});
         try {

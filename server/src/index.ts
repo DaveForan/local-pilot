@@ -3,7 +3,7 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import express from 'express';
 import { PORT, HOST, paths } from './config';
-import { ensureDirs } from './store';
+import { ensureDirs, flushWrites } from './store';
 import { SessionManager } from './sessionManager';
 import { WsHub } from './wsHub';
 import { createApiRouter } from './api';
@@ -81,7 +81,12 @@ async function main(): Promise<void> {
   const shutdown = (): void => {
     console.log('\n[server] shutting down…');
     manager.disposeAll();
-    server.close(() => process.exit(0));
+    // disposeAll flushed each session's debounced state — wait for those
+    // writes to actually land before exiting, or the tail of every active
+    // session is lost. The 2s backstop still guarantees we exit.
+    void flushWrites().finally(() => {
+      server.close(() => process.exit(0));
+    });
     setTimeout(() => process.exit(0), 2000).unref();
   };
   process.on('SIGINT', shutdown);

@@ -175,6 +175,13 @@ class MessageQueue<T> implements AsyncIterable<T> {
     while ((w = this.waiters.shift())) w({ value: undefined as never, done: true });
   }
 
+  /** Remove and return everything still queued (i.e. never consumed). */
+  drain(): T[] {
+    const items = this.items;
+    this.items = [];
+    return items;
+  }
+
   [Symbol.asyncIterator](): AsyncIterator<T> {
     return {
       next: (): Promise<IteratorResult<T>> => {
@@ -294,7 +301,12 @@ export class ClaudeRunner {
       this.generator = runQuery({ prompt: this.queue, options });
       void this.pump(this.generator);
     } catch (err) {
+      // Without onEnd() the Session keeps handing input to this zombie
+      // (started=true, no generator) and sticks in "running" forever.
+      this.stopped = true;
+      this.generator = null;
       this.opts.onError(err);
+      this.opts.onEnd();
     }
   }
 
@@ -307,6 +319,18 @@ export class ClaudeRunner {
     } catch (err) {
       if (!this.stopped) this.opts.onError(err);
     } finally {
+      // Messages queued behind the current turn die with the runner, but the
+      // UI already shows them as sent — say so, or the user believes Claude
+      // saw something it never did.
+      const undelivered = this.queue.drain();
+      if (undelivered.length > 0 && !this.stopped) {
+        this.opts.onEvent({
+          kind: 'system',
+          text:
+            `${undelivered.length} queued message${undelivered.length === 1 ? ' was' : 's were'} ` +
+            'never delivered — the Claude process ended first. Please resend.',
+        });
+      }
       this.opts.onEnd();
     }
   }

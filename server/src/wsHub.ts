@@ -9,6 +9,9 @@ import { hasValidSession } from './auth';
  *  even with long tool results, while still being one round trip. */
 const HISTORY_PAGE_SIZE = 200;
 
+/** Cut a connection whose unsent backlog exceeds this — see send(). */
+const MAX_BUFFERED_BYTES = 32 * 1024 * 1024;
+
 /** What SessionManager needs to push messages out to browsers. */
 export interface Broadcaster {
   toAll(msg: ServerMessage): void;
@@ -33,6 +36,10 @@ export class WsHub implements Broadcaster {
   }
 
   private onConnection(ws: WebSocket, req: IncomingMessage): void {
+    // A socket with no 'error' listener turns any transport error into an
+    // uncaught exception that kills the process — attach it first, before
+    // the auth check can bail out and leave the socket bare.
+    ws.on('error', () => this.attachments.delete(ws));
     // The session cookie rides along on the WebSocket handshake (same-origin),
     // so no secret ever appears in the URL.
     if (!hasValidSession(req.headers.cookie)) {
@@ -43,7 +50,6 @@ export class WsHub implements Broadcaster {
     this.send(ws, { t: 'sessions', sessions: this.manager.list() });
     ws.on('message', (raw) => this.onMessage(ws, raw.toString()));
     ws.on('close', () => this.attachments.delete(ws));
-    ws.on('error', () => this.attachments.delete(ws));
   }
 
   private onMessage(ws: WebSocket, raw: string): void {
@@ -108,7 +114,13 @@ export class WsHub implements Broadcaster {
         break;
       case 'loadEarlier': {
         const session = this.manager.get(msg.sessionId);
-        if (!session) return;
+        if (!session) {
+          // Answer anyway — the client set a loadingEarlier flag that only a
+          // historyChunk clears, so silence would wedge its "Load earlier"
+          // button until the next reattach.
+          this.send(ws, { t: 'historyChunk', sessionId: msg.sessionId, events: [], hasMore: false });
+          return;
+        }
         const all = session.events;
         // Find index of first event with seq >= beforeSeq; we slice the
         // chunk immediately preceding it.
@@ -169,6 +181,17 @@ export class WsHub implements Broadcaster {
   }
 
   private send(ws: WebSocket, msg: ServerMessage): void {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+    if (ws.readyState !== WebSocket.OPEN) return;
+    // Backpressure guard: history pages and tool results can carry multi-MB
+    // base64 images, and a client that stops reading would otherwise grow the
+    // server-side buffer without bound. Dropping individual messages would
+    // corrupt the event stream, so cut the connection instead — the client
+    // reconnects and re-attaches with a fresh history pull.
+    if (ws.bufferedAmount > MAX_BUFFERED_BYTES) {
+      console.warn('[ws] closing slow client — send buffer exceeded');
+      ws.terminate();
+      return;
+    }
+    ws.send(JSON.stringify(msg));
   }
 }
