@@ -31,6 +31,10 @@ export class SessionManager {
   private cachedSlashCommands: SlashCommand[] = [];
   /** Authenticated account info — populated lazily by a running session. */
   private cachedAccount: AccountInfo | null = null;
+  /** Assistant reply text accumulated for the in-flight turn, per session —
+   *  used to preview the response in the turn-complete notification (the
+   *  `result` event itself carries only a status string). */
+  private turnReply = new Map<string, string>();
   /** Memoizes the one-shot SDK discovery probe so concurrent callers share it. */
   private catalogProbe: Promise<void> | null = null;
 
@@ -251,13 +255,21 @@ export class SessionManager {
     return {
       onEvent: (sessionId, event) => {
         this.broadcaster?.toSession(sessionId, { t: 'event', sessionId, event });
+        // Accumulate the turn's assistant reply so the notification can preview
+        // it — the `result` event carries only a status string, not the text.
+        if (event.kind === 'assistant' && event.text) {
+          const prior = this.turnReply.get(sessionId);
+          this.turnReply.set(sessionId, prior ? `${prior} ${event.text}` : event.text);
+        }
         // A finished turn is a "come back and look" moment — push it out.
         if (event.kind === 'result') {
+          const reply = this.turnReply.get(sessionId) ?? '';
+          this.turnReply.delete(sessionId);
           this.notify(
             sessionId,
             event.isError
               ? 'Turn ended with an error'
-              : previewText(event.text) || 'Turn complete',
+              : previewText(reply) || 'Turn complete',
           );
         }
       },
@@ -296,15 +308,16 @@ function basename(dir: string): string {
   return dir.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || dir;
 }
 
-/** Condense an assistant reply into a one-line notification preview: the
- *  beginning of the response, with code blocks and markdown markers stripped
- *  and whitespace collapsed. Returns '' when there's no usable text. */
-function previewText(text: string, max = 140): string {
+/** Condense an assistant reply into a notification preview: the first ~300
+ *  characters of the response, with code-fence lines and markdown markers
+ *  stripped (code text kept) and whitespace collapsed, ending in an ellipsis
+ *  when truncated. Returns '' when there's no usable text. */
+function previewText(text: string, max = 300): string {
   const clean = (text ?? '')
-    .replace(/```[\s\S]*?```/g, ' ') // drop fenced code blocks
-    .replace(/[`*_#>]/g, '') // strip common markdown markers
+    .replace(/```[^\n]*\n?/g, '') // strip code-fence lines, keep the code text
+    .replace(/[`*_#>]/g, '') // strip inline markdown markers
     .replace(/\s+/g, ' ') // collapse newlines/whitespace
     .trim();
   if (clean.length <= max) return clean;
-  return clean.slice(0, max - 1).trimEnd() + '…';
+  return clean.slice(0, max).trimEnd() + '…';
 }

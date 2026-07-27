@@ -2,25 +2,28 @@ import type { ModelInfo, EffortLevel } from './protocol';
 
 /**
  * Curated list shown only until the server's SDK discovery probe reports the
- * account's real catalog (see `api.models()`). Only ids the bundled CLI
- * actually accepts (verified against the SDK bundle): Opus 4.8/4.6, Sonnet
- * 4.6, Haiku 4.5. (There is no explicit `claude-opus-4-7` in this CLI.)
+ * account's real catalog (see `api.models()`) — discovery is authoritative and
+ * replaces this list at runtime. Kept current with the model lineup; every id
+ * is present in the bundled Agent SDK (@anthropic-ai/claude-agent-sdk 0.3.220),
+ * whose discovery probe reports Opus 5 as the recommended default.
  */
 export const FALLBACK_MODELS: ModelInfo[] = [
-  { value: 'claude-opus-4-8', displayName: 'Claude Opus 4.8', description: '' },
-  { value: 'claude-opus-4-6', displayName: 'Claude Opus 4.6', description: '' },
-  { value: 'claude-sonnet-4-6', displayName: 'Claude Sonnet 4.6', description: '' },
+  { value: 'claude-opus-5', displayName: 'Claude Opus 5', description: '' },
+  { value: 'claude-fable-5', displayName: 'Claude Fable 5', description: '' },
+  { value: 'claude-sonnet-5', displayName: 'Claude Sonnet 5', description: '' },
   { value: 'claude-haiku-4-5-20251001', displayName: 'Claude Haiku 4.5', description: '' },
 ];
 
 /**
  * Explicit version pins offered *in addition* to the SDK's quick-pick aliases.
  * The SDK's aliases (`default`, `opus[1m]`, …) track the newest release; this
- * pins a specific older version the aliases don't otherwise expose. Only
- * `claude-opus-4-6` qualifies today — it's a valid CLI model id and is not
- * reachable via any alias.
+ * pins specific older versions the aliases don't otherwise expose — the
+ * previous-generation Opus releases, both valid CLI model ids not reachable
+ * via any alias.
  */
 export const PINNED_MODELS: ModelInfo[] = [
+  { value: 'claude-opus-4-8', displayName: 'Claude Opus 4.8', description: '' },
+  { value: 'claude-opus-4-7', displayName: 'Claude Opus 4.7', description: '' },
   { value: 'claude-opus-4-6', displayName: 'Claude Opus 4.6', description: '' },
 ];
 
@@ -56,6 +59,15 @@ function effortFallback(m: ModelInfo): EffortLevel[] {
   if (s.includes('4-6') || s.includes('4.6')) {
     // Opus 4.6 / Sonnet 4.6: no xhigh (that's Opus 4.7+), but max is supported.
     return ['low', 'medium', 'high', 'max'];
+  }
+  // Fable 5 / Mythos 5 and Sonnet 5 support the full range including xhigh.
+  if (
+    s.includes('fable') ||
+    s.includes('mythos') ||
+    s.includes('sonnet-5') ||
+    s.includes('sonnet 5')
+  ) {
+    return ALL_EFFORT;
   }
   if (s.includes('opus') || /\bdefault\b/.test(m.value) || s.includes('opus[1m]')) {
     return ALL_EFFORT; // Opus 4.8 and the opus aliases

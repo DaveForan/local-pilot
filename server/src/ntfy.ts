@@ -12,13 +12,24 @@ export interface NtfyMessage {
   sessionId: string;
 }
 
+// One ntfy server usually carries topics from several self-hosted services, so
+// prefix the session title with the app name — an untagged notification named
+// after a conversation is easy to mistake for another service's alert. The 🤖
+// `robot_face` tag is the secondary signal.
+const APP_LABEL = 'Local-Pilot';
+
+function brandedTitle(title: string): string {
+  const t = (title ?? '').trim();
+  return t && t !== 'local-pilot' ? `${APP_LABEL}: ${t}` : APP_LABEL;
+}
+
 /** Fire-and-forget: never blocks the caller or throws into it. */
 export function publishNtfy(msg: NtfyMessage): void {
   if (!NTFY_URL) return;
   const base = NTFY_URL.replace(/\/+$/, '');
   const payload: Record<string, unknown> = {
     topic: NTFY_TOPIC,
-    title: msg.title,
+    title: brandedTitle(msg.title),
     message: msg.body,
     tags: ['robot_face'],
   };
