@@ -1,7 +1,7 @@
 {
   "name": "local-pilot",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Web interface to run and control Claude Code sessions remotely over Tailscale",
   "workspaces": [
     "server",
