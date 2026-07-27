@@ -44,3 +44,12 @@ export const paths = {
 /** Default working directory offered when creating a session. */
 export const DEFAULT_CWD =
   process.env.LOCAL_PILOT_DEFAULT_CWD ?? path.join(os.homedir(), 'Projects');
+
+// ntfy notifications. When LOCAL_PILOT_NTFY_URL is set, local-pilot posts a
+// notification to this ntfy server on turn completion / permission prompts, so
+// alerts land in the same ntfy app used for other self-hosted services. An
+// empty URL disables it. PUBLIC_URL is the externally reachable base (e.g. the
+// tailnet HTTPS URL) used to build the click-through deep link into a session.
+export const NTFY_URL = process.env.LOCAL_PILOT_NTFY_URL ?? '';
+export const NTFY_TOPIC = process.env.LOCAL_PILOT_NTFY_TOPIC ?? 'local-pilot';
+export const PUBLIC_URL = process.env.LOCAL_PILOT_PUBLIC_URL ?? '';

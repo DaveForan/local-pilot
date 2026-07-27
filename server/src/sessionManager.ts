@@ -5,6 +5,7 @@ import type { SessionHooks } from './session';
 import type { Broadcaster } from './wsHub';
 import { saveSession, deleteSessionFile, loadAllSessions } from './store';
 import { sendPush } from './push';
+import { publishNtfy } from './ntfy';
 import { DEFAULT_CWD } from './config';
 import { discover } from './claudeRunner';
 import type {
@@ -254,7 +255,9 @@ export class SessionManager {
         if (event.kind === 'result') {
           this.notify(
             sessionId,
-            event.isError ? 'Turn ended with an error' : 'Turn complete',
+            event.isError
+              ? 'Turn ended with an error'
+              : previewText(event.text) || 'Turn complete',
           );
         }
       },
@@ -285,9 +288,23 @@ export class SessionManager {
   private notify(sessionId: string, body: string): void {
     const title = this.sessions.get(sessionId)?.meta.title ?? 'local-pilot';
     void sendPush({ title, body, sessionId, tag: sessionId });
+    publishNtfy({ title, body, sessionId });
   }
 }
 
 function basename(dir: string): string {
   return dir.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || dir;
+}
+
+/** Condense an assistant reply into a one-line notification preview: the
+ *  beginning of the response, with code blocks and markdown markers stripped
+ *  and whitespace collapsed. Returns '' when there's no usable text. */
+function previewText(text: string, max = 140): string {
+  const clean = (text ?? '')
+    .replace(/```[\s\S]*?```/g, ' ') // drop fenced code blocks
+    .replace(/[`*_#>]/g, '') // strip common markdown markers
+    .replace(/\s+/g, ' ') // collapse newlines/whitespace
+    .trim();
+  if (clean.length <= max) return clean;
+  return clean.slice(0, max - 1).trimEnd() + '…';
 }
